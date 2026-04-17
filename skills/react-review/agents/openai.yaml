@@ -1,0 +1,4 @@
+interface:
+  display_name: "React Review"
+  short_description: "Review React and React Native code for lifecycle and identity bugs"
+  default_prompt: "Review this React or React Native change with $react-review."
