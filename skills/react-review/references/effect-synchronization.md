@@ -103,6 +103,7 @@ Flag when:
 - at least one dependency is likely to churn by identity
 - that churn would make React run cleanup while the component or screen is still logically active
 - the Hook or Effect exposes a disappearance-only semantic callback, making dependency-change cleanup look more like a false lifecycle transition than a balanced lifecycle contract
+- especially when a custom Hook accepts an `on...` callback, includes it in Effect deps, and cleanup calls it directly or indirectly
 
 Do not flag when:
 
@@ -125,6 +126,15 @@ Preferred fixes:
 - keep the latest callback in a ref or use `useEffectEvent`
 - key the Effect to the true external boundary only
 
+Strong signal:
+
+- a custom Hook accepts a callback like `onDisappear`, `onClose`, `onExit`, or `onUnmount`
+- the Hook places that callback in an Effect dependency array
+- the Effect cleanup calls that callback directly or indirectly
+
+When all three are true, treat inline callback usage as the default threat model.
+Unless the Hook stabilizes the callback internally or the API explicitly documents memoization as required, emit a finding.
+
 ## Heuristic: Custom Hook forwards unstable callback or options into Effect deps unsafely
 
 Inspect:
@@ -142,6 +152,7 @@ Flag when:
 - a consumer could accidentally trigger teardown or resync by passing a fresh inline callback or object each render
 - a consumer passing an inline callback would cause cleanup to invoke stale or premature domain logic before re-subscription
 - the Hook's public API suggests the callback is a semantic lifecycle event rather than mere teardown plumbing, but the implementation lets dependency churn trigger it anyway
+- when this pattern appears, assume ordinary consumers may pass inline callbacks unless an inspected callsite proves otherwise
 
 Do not flag when:
 
@@ -161,6 +172,16 @@ Preferred fixes:
 - subscribe using the true sync key only, and store the latest callback in a ref or use `useEffectEvent`
 - stabilize options or split them into reactive primitives and non-reactive callbacks
 - document when identity is intentionally part of the contract
+
+## Callback stability checklist
+
+For every changed Hook or component that accepts a callback and uses it inside an Effect:
+
+- Is the callback part of the true synchronization key, or only latest-read logic?
+- Does the Effect dependency array include that callback?
+- Does cleanup call the callback or trigger domain work derived from it?
+- If the caller re-renders with a fresh inline callback, would React run cleanup and fire the old callback before re-subscribing?
+- If yes, emit a finding unless the Hook stabilizes the callback internally or the API explicitly documents memoization as required.
 
 ## Version-aware guidance
 

@@ -59,6 +59,8 @@ Keep findings brief. Explain just enough React model to justify the finding.
 3. For every changed custom Hook that wraps `useEffect`, `useLayoutEffect`, `useInsertionEffect`, `useFocusEffect`, subscriptions, or similar lifecycle-sensitive APIs:
    - inspect at least one real callsite when the Hook accepts a callback
    - if no callsite is inspected, assume the callback may be passed inline and review under that assumption
+   - if the Hook calls an `on...` callback from Effect cleanup, explicitly test whether callback identity churn would fire that semantic callback during dependency-change cleanup
+   - do not clear this concern just because some callsites use `useCallback`; the Hook should be safe for ordinary inline usage unless its API explicitly requires memoization
 4. Run the named heuristics from the relevant reference files
 5. Emit only findings that meet the heuristic's evidence threshold
 6. If intent is ambiguous, state what extra context would confirm or clear the concern
@@ -98,6 +100,7 @@ The core heuristics for `v1` are:
   - if a Hook emits `onDisappear`, `onClose`, or similar cleanup-only semantics without a matching `onAppear` or setup-side semantic event, do not assume dependency churn is a valid trigger for that callback
 - Treat callback props and Hook arguments as unstable by default unless the reviewed code stabilizes them internally or an inspected callsite proves stability
 - Never assume a caller used `useCallback` unless the callsite was actually inspected
+- If a custom Hook accepts a callback, depends on it in an Effect, and calls it from cleanup, treat inline callback usage as the default threat model and check for false lifecycle events on dependency churn
 - Prefer `useEffectEvent` for Effect-only callback logic when the codebase supports it
 - Otherwise prefer a latest-ref pattern or restructuring the Effect so the true reactive inputs are explicit
 - Do not recommend `useEffectEvent` when the function is passed across Hook or component boundaries
