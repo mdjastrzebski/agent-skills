@@ -11,7 +11,7 @@ Review every Effect as a synchronization contract:
 - Which values only need to be read fresh?
 - If the Effect has cleanup, what work becomes visible on unmount and on dependency change before re-subscribe?
 - Does cleanup perform semantic work beyond removing the subscription itself, especially in an asymmetric lifecycle API such as `onDisappear` without `onAppear`?
-- Treat callback props, options objects, and other reference-typed Hook arguments as unstable by default unless the reviewed code stabilizes them internally or an inspected callsite proves otherwise
+- Treat callback props, options objects, and other reference-typed Hook inputs as unstable by default unless the reviewed code stabilizes them internally or an inspected callsite proves otherwise
 - Would identity churn cause re-subscribe, re-register, timer reset, animation restart, re-measure, or premature cleanup?
 
 ## Heuristic: Identity churn accidentally drives Effect synchronization
@@ -87,10 +87,12 @@ Preferred fixes:
 
 ## Heuristic: Cleanup executes semantic callback on dependency churn
 
+Default severity: High for lifecycle or business callbacks such as `onDisappear`, `onClose`, `onDismiss`, `onExit`, save/persist, pause/stop, dismissal, or teardown visible outside the component. Lower to Medium only when clearly internal, idempotent, and not externally visible.
+
 Inspect:
 
 - Effects that return cleanup functions calling `onClose`, `onDisappear`, `onExit`, `onUnmount`, tracking functions, or other user or domain callbacks
-- dependency arrays containing callback, function, object, options, or other reference-typed identities
+- dependency arrays containing reference-typed identities
 - custom Hooks with asymmetric lifecycle APIs, especially cleanup-only callbacks
 
 Flag when:
@@ -98,7 +100,7 @@ Flag when:
 - cleanup does more than detach the external resource
 - at least one dependency is likely to churn by identity
 - that churn would make React run cleanup while the component or screen is still logically active
-- a custom Hook accepts an `on...` callback, options object, or similar reference-typed input, includes it in Effect deps, and cleanup calls it directly or triggers domain work derived from it
+- a custom Hook accepts an `on...` callback, options object, or similar reference-typed input, includes it in Effect deps, and cleanup calls it or triggers domain work derived from it
 - the Hook or Effect exposes a disappearance-only semantic callback, making dependency-change cleanup look more like a false lifecycle transition than a balanced lifecycle contract
 
 Do not flag when:
@@ -130,7 +132,7 @@ Inspect:
 - Hooks that accept `callback`, `handler`, `listener`, `options`, or config objects
 - Effects inside the Hook that depend on those values
 - Hooks that accept `on...` callbacks and call them from cleanup
-- Effects whose dependency array includes user-supplied callback, options, config, or other reference-typed values directly
+- Effects whose dependency array includes user-supplied reference-typed values directly
 - Hooks with asymmetric lifecycle APIs, especially cleanup-only callbacks like `onDisappear` without a matching setup-side callback
 
 Flag when:
@@ -141,7 +143,7 @@ Flag when:
 - a consumer passing an inline callback would cause cleanup to invoke stale or premature domain logic before re-subscription
 - a consumer passing a fresh inline object or options bag would cause cleanup to run semantic teardown before re-subscription
 - the Hook's public API suggests the callback is a semantic lifecycle event rather than mere teardown plumbing, but the implementation lets dependency churn trigger it anyway
-- when this pattern appears, assume ordinary consumers may pass inline callbacks unless an inspected callsite proves otherwise
+- when this pattern appears, assume ordinary consumers may pass inline values unless an inspected callsite proves otherwise
 
 Do not flag when:
 

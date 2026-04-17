@@ -23,6 +23,7 @@ Review React and React Native changes with a correctness-first mindset. Favor hi
   - full component return tree
   - nearby helpers, nested component definitions, and key usage
   - for custom Hooks, both the hook boundary and at least one real callsite when the Hook accepts a callback
+- Prefer High severity when dependency churn can fire semantic lifecycle callbacks while the component remains mounted
 - Use severity based on likely user impact, not on whether a lint rule is technically violated
 - Use high precision. Do not flag a heuristic unless its evidence threshold is met
 - If a claim depends on React semantics, anchor it to official React docs, React's lint rules, or React source behavior when needed
@@ -30,7 +31,7 @@ Review React and React Native changes with a correctness-first mindset. Favor hi
 
 ## Severity model
 
-- High: likely behavior break, premature cleanup, remount/reset, duplicate subscription, lost state, or externally visible timing bug
+- High: likely behavior break, premature cleanup, premature semantic lifecycle callback, remount/reset, duplicate subscription, lost state, or externally visible timing bug
 - Medium: semantics are suspicious and commonly cause bugs, but intent or impact is not fully proven
 - Low: maintainability smell or brittle pattern worth double-checking, but not clearly wrong
 
@@ -58,7 +59,7 @@ Keep findings brief. Explain just enough React model to justify the finding.
 2. Read the full local unit before making claims
 3. For every changed custom Hook that wraps `useEffect`, `useLayoutEffect`, `useInsertionEffect`, `useFocusEffect`, subscriptions, or similar lifecycle-sensitive APIs:
    - inspect at least one real callsite when the Hook accepts a callback; otherwise assume inline usage
-   - if cleanup performs semantic work, test whether dependency-change cleanup could fire it while the component is still logically active because a callback, options object, or other reference-typed dep churned; do not clear this concern just because some callsites memoize unless the API explicitly requires stable identities
+   - if cleanup performs semantic work, test whether dependency-change cleanup could fire it while the component is still logically active because a reference-typed dep churned; do not clear this concern just because some callsites memoize unless the API requires stable identities
 4. Run the named heuristics from the relevant reference files
 5. Emit only findings that meet the heuristic's evidence threshold
 6. If intent is ambiguous, state what extra context would confirm or clear the concern
@@ -75,7 +76,7 @@ The core heuristics for `v1` are:
 
 - Identity churn accidentally drives Effect synchronization
 - Cleanup timing does not match the intended synchronization boundary
-- Cleanup executes semantic callback on dependency churn
+- Cleanup executes semantic callback on dependency churn: default High for lifecycle or business callbacks; lower to Medium only when clearly internal, idempotent, and not externally visible
 - Custom Hook forwards unstable callback or options into Effect deps unsafely
 - Nested component definition creates unstable component identity
 - Conditional wrapper or branch reshaping remounts a subtree
@@ -92,8 +93,8 @@ The core heuristics for `v1` are:
 - Distinguish between:
   - synchronization key: values that should cause setup or cleanup to re-run
   - latest-read logic: values that must stay fresh without redefining the synchronization boundary
-- Treat callback props, options objects, and other reference-typed Hook arguments as unstable by default unless the reviewed code stabilizes them internally or an inspected callsite proves stability; never assume a caller used `useCallback`, `useMemo`, or hoisting unless you inspected the callsite
-- Treat asymmetric lifecycle Hooks like `onDisappear` or `onClose` with extra suspicion; if semantic cleanup depends on reference-typed deps, assume identity churn can cause false lifecycle events unless the Hook stabilizes those values or the API explicitly requires stable identities
+- Treat callback props, options objects, and other reference-typed Hook inputs as unstable by default unless the reviewed code stabilizes them internally or an inspected callsite proves stability; never assume `useCallback`, `useMemo`, or hoisting unless you inspected the callsite
+- Treat asymmetric lifecycle Hooks like `onDisappear`, `onClose`, `onDismiss`, `onExit`, or save/persist callbacks with extra suspicion; if semantic cleanup depends on reference-typed deps, assume identity churn can cause false lifecycle events unless the Hook stabilizes those values or the API requires stable identities. Default these findings to High when externally observable
 - Prefer `useEffectEvent` for Effect-only callback logic when the codebase supports it
 - Otherwise prefer a latest-ref pattern or restructuring the Effect so the true reactive inputs are explicit
 - Do not recommend `useEffectEvent` when the function is passed across Hook or component boundaries
