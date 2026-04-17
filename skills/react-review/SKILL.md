@@ -19,9 +19,10 @@ Review React and React Native changes with a correctness-first mindset. Favor hi
 - Prioritize bugs, regressions, and semantic risks over style
 - Read the full local unit before judging a pattern:
   - full Effect body, cleanup, and dependency array
+  - for any Effect cleanup, review both dependency-change cleanup and unmount cleanup
   - full component return tree
   - nearby helpers, nested component definitions, and key usage
-  - for custom Hooks, both the hook boundary and the callsite if needed
+  - for custom Hooks, both the hook boundary and at least one real callsite when the Hook accepts a callback
 - Use severity based on likely user impact, not on whether a lint rule is technically violated
 - Use high precision. Do not flag a heuristic unless its evidence threshold is met
 - If a claim depends on React semantics, anchor it to official React docs, React's lint rules, or React source behavior when needed
@@ -55,9 +56,12 @@ Keep findings brief. Explain just enough React model to justify the finding.
    - Identity / state preservation
    - React Native runtime integration
 2. Read the full local unit before making claims
-3. Run the named heuristics from the relevant reference files
-4. Emit only findings that meet the heuristic's evidence threshold
-5. If intent is ambiguous, state what extra context would confirm or clear the concern
+3. For every changed custom Hook that wraps `useEffect`, `useLayoutEffect`, `useInsertionEffect`, `useFocusEffect`, subscriptions, or similar lifecycle-sensitive APIs:
+   - inspect at least one real callsite when the Hook accepts a callback
+   - if no callsite is inspected, assume the callback may be passed inline and review under that assumption
+4. Run the named heuristics from the relevant reference files
+5. Emit only findings that meet the heuristic's evidence threshold
+6. If intent is ambiguous, state what extra context would confirm or clear the concern
 
 ## Named heuristics
 
@@ -71,6 +75,7 @@ The core heuristics for `v1` are:
 
 - Identity churn accidentally drives Effect synchronization
 - Cleanup timing does not match the intended synchronization boundary
+- Cleanup executes semantic callback on dependency churn
 - Custom Hook forwards unstable callback or options into Effect deps unsafely
 - Nested component definition creates unstable component identity
 - Conditional wrapper or branch reshaping remounts a subtree
@@ -83,9 +88,16 @@ The core heuristics for `v1` are:
 ## Default assumptions
 
 - Treat every Effect as a synchronization contract, not as a dependency-array formatting exercise
+- For any Effect with cleanup, review both triggers:
+  - unmount
+  - dependency change before re-subscribe
 - Distinguish between:
   - synchronization key: values that should cause setup or cleanup to re-run
   - latest-read logic: values that must stay fresh without redefining the synchronization boundary
+- Treat asymmetric lifecycle Hooks with extra suspicion:
+  - if a Hook emits `onDisappear`, `onClose`, or similar cleanup-only semantics without a matching `onAppear` or setup-side semantic event, do not assume dependency churn is a valid trigger for that callback
+- Treat callback props and Hook arguments as unstable by default unless the reviewed code stabilizes them internally or an inspected callsite proves stability
+- Never assume a caller used `useCallback` unless the callsite was actually inspected
 - Prefer `useEffectEvent` for Effect-only callback logic when the codebase supports it
 - Otherwise prefer a latest-ref pattern or restructuring the Effect so the true reactive inputs are explicit
 - Do not recommend `useEffectEvent` when the function is passed across Hook or component boundaries
