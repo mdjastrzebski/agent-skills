@@ -1,6 +1,6 @@
 ---
 name: story
-description: Explain how a system, module, or other large part of code works by telling the story of the system — a few core concepts first, then progressively more detail, pausing between passes. Use when the user asks how a system, service, library, subsystem, or unfamiliar module works, or wants an architecture walkthrough.
+description: Explain how a system, module, service, library, framework, subsystem, or unfamiliar codebase works by telling the story of the system. Use when the user asks how something works, how it is structured or designed, asks to explain or walk through an architecture or design, wants a high-level overview of a package or subsystem, or wants to be onboarded to unfamiliar code. Not for narrow lookups answerable by pointing at a single function or config value.
 ---
 
 # Story
