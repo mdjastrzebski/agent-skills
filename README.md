@@ -25,6 +25,7 @@ For more on the CLI, see:
 | --- | --- | --- |
 | `deep-probe` | Interview the user relentlessly about a plan or design, prioritizing the highest-leverage unknowns first and filling in lower-priority gaps on request. | `npx skills add https://github.com/mdjastrzebski/agent-skills --skill deep-probe` |
 | `react-review` | Review React and React Native code for correctness bugs rooted in effects, identity, state preservation, tree stability, and lifecycle timing. | `npx skills add https://github.com/mdjastrzebski/agent-skills --skill react-review` |
+| `story` | Explain how a system, module, or other large part of code works by telling the story of the system — a few core concepts first, then progressively more detail. | `npx skills add https://github.com/mdjastrzebski/agent-skills --skill story` |
 
 `deep-probe` is adapted from Matt Pocock's `grill-me` skill: [mattpocock/skills](https://github.com/mattpocock/skills).
 
