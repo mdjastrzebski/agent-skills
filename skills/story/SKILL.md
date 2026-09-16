@@ -11,7 +11,7 @@ First of all do proper research to understand how the system works: read the rel
 
 Then explain the architecture of the system using only a few concepts, maybe as few as two or three. A concept can be a class or module when that's genuinely how the system thinks — use the system's own names. What makes it a concept is that it carries meaning in the design, not that it appears in the directory tree. Test your set: if I knew only these, could I predict roughly where new behavior would live? If not, you picked the wrong concepts, not too few.
 
-Act as if I am a skilled programmer but know little about the system. Explain what the pieces of the design are and how they interact in only a few sentences. Make sure to articulate the most essential things about the system.
+Act as if I am a skilled programmer but know little about the system. Explain what the pieces of the design are and how they interact in only a few sentences. Make sure to articulate the most essential things about the system. Do not give a file-by-file or module-by-module tour, and do not present the directory tree as the architecture.
 
 Then pause and ask if you should continue. If so, pick the next most important things to say about the system. Keep going until you've said just about everything important about the core design of the system.
 
