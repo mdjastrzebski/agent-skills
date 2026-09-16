@@ -7,7 +7,7 @@ description: Explain how a system, module, or other large part of code works by 
 
 When asked to explain how a given system, module, or other large part of code works, tell the "story of the system".
 
-First of all do proper research to understand how the system works: read the relevant documentation (in repo or online) and read the source code.
+First of all do proper research to understand how the system works: read the relevant documentation (in repo or online) and read the source code. Start at entry points, public interfaces, and top-level types, and follow at least one real path end to end. Stop researching once you can name the core pieces and say how they interact — you don't need to understand every file.
 
 Then explain the architecture of the system using only a few concepts, maybe as few as two or three. Act as if I am a skilled programmer but know little about the system. Explain what the pieces of the design are and how they interact in only a few sentences. Make sure to articulate the most essential things about the system.
 
