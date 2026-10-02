@@ -23,6 +23,8 @@ For more on the CLI, see:
 
 | Skill | Summary | Install |
 | --- | --- | --- |
+| `index-codebase` | Study a whole repository and write durable agent docs to `docs/agents/` (architecture, area map, design decisions, where to look, configuration and extension, limitations, security, dev loop, contribution rules, release process), linked from `AGENTS.md`; checks and fixes any existing agent docs, and refreshes everything when the code changes. | `npx skills add https://github.com/mdjastrzebski/agent-skills --skill index-codebase` |
+| `index-github` | Assess a GitHub project before adopting or contributing to it (activity and responsiveness, maintainers and backing, maturity, alternatives, license and CLA, community, what contributions are welcome, bug hotspots) and write a dated snapshot to `docs/agents/project-health.md`, linked from `AGENTS.md`. | `npx skills add https://github.com/mdjastrzebski/agent-skills --skill index-github` |
 | `instrument-with-console-logs` | Add temporary `👀 DEBUG` console.log statements across changed code and surrounding lifecycle code to validate runtime behavior, then strip them again. | `npx skills add https://github.com/mdjastrzebski/agent-skills --skill instrument-with-console-logs` |
 | `react-review` | Review React and React Native code for correctness bugs rooted in effects, identity, state preservation, tree stability, and lifecycle timing. | `npx skills add https://github.com/mdjastrzebski/agent-skills --skill react-review` |
 | `story` | Explain how a system, module, service, or unfamiliar codebase works by telling the story of the system: a few core concepts first, then more detail on request. | `npx skills add https://github.com/mdjastrzebski/agent-skills --skill story` |
@@ -35,11 +37,13 @@ skills/
   <skill-name>/
     SKILL.md
     references/        # optional
+    scripts/           # optional
     agents/            # optional
 ```
 
 - `SKILL.md` is the canonical instruction file for a skill.
 - `references/` holds targeted supporting material that can be loaded on demand.
+- `scripts/` holds optional helper scripts for deterministic work such as fetching and aggregating data.
 - `agents/` holds optional agent-specific metadata or integration config.
 
 ## Authoring

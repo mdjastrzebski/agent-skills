@@ -1,6 +1,6 @@
 # Supporting Files
 
-Use this guide when deciding whether to add `references/` or `agents/`.
+Use this guide when deciding whether to add `references/`, `scripts/`, or `agents/`.
 
 ## References
 
@@ -14,6 +14,17 @@ When adding `references/`:
 - avoid dumping large background material into the main `SKILL.md`
 
 Do not create `references/` just because another skill has one.
+
+## Scripts
+
+Add `skills/<skill-name>/scripts/` only for deterministic work the model would otherwise do by hand and get wrong, such as fetching and aggregating data or computing statistics.
+
+When adding `scripts/`:
+
+- keep each script self-contained, using only the standard library of a language most agents can run (for example, Python 3)
+- make it read-only unless writing is the skill's purpose
+- document its usage in a docstring and in `SKILL.md`, and refer to it by its path relative to `SKILL.md`
+- print machine-readable output that the model interprets, rather than conclusions
 
 ## Agent-Specific Config
 
