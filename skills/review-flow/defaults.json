@@ -1,0 +1,47 @@
+{
+  "rigor": "medium",
+  "models": {
+    "claude": { "reviewer": "sonnet", "merger": "haiku", "verifier": "opus" },
+    "cursor": { "reviewer": "auto", "merger": "auto", "verifier": "auto" }
+  },
+  "lenses": {
+    "enabled": ["correctness", "security", "tests", "performance", "react-native"],
+    "custom": []
+  },
+  "checks": {},
+  "rigorPresets": {
+    "low": {
+      "lenses": ["correctness", "security"],
+      "secondCorrectnessPass": false,
+      "allowExecution": false,
+      "maxVerified": 10,
+      "parallel": 3
+    },
+    "medium": {
+      "lenses": ["correctness", "security", "tests", "performance"],
+      "secondCorrectnessPass": false,
+      "allowExecution": true,
+      "maxVerified": 25,
+      "parallel": 4
+    },
+    "high": {
+      "lenses": ["correctness", "security", "tests", "performance", "react-native"],
+      "secondCorrectnessPass": true,
+      "allowExecution": true,
+      "maxVerified": 50,
+      "parallel": 6
+    }
+  },
+  "scoring": {
+    "severity": { "critical": 10, "high": 6, "medium": 3, "low": 1 },
+    "confidence": {
+      "confirmed": { "executed": 1, "traced": 0.85, "reasoned": 0.65 },
+      "uncertain": 0.35,
+      "refuted": 0
+    },
+    "impact": { "user-facing": 1.2, "developer-facing": 1, "internal": 0.9 },
+    "fixBeforeMergeThreshold": 5
+  },
+  "ignore": [],
+  "publish": { "includeFollowUps": true }
+}

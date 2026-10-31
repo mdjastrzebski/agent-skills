@@ -1,0 +1,327 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "rigor": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "base": {
+      "type": "string",
+      "minLength": 1
+    },
+    "models": {
+      "type": "object",
+      "properties": {
+        "claude": {
+          "type": "object",
+          "properties": {
+            "reviewer": {
+              "type": "string",
+              "minLength": 1
+            },
+            "merger": {
+              "type": "string",
+              "minLength": 1
+            },
+            "verifier": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        "cursor": {
+          "type": "object",
+          "properties": {
+            "reviewer": {
+              "type": "string",
+              "minLength": 1
+            },
+            "merger": {
+              "type": "string",
+              "minLength": 1
+            },
+            "verifier": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "lenses": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "correctness",
+              "security",
+              "performance",
+              "tests",
+              "react-native"
+            ]
+          }
+        },
+        "custom": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "checks": {
+      "type": "object",
+      "properties": {
+        "typecheck": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "test": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "rigorPresets": {
+      "type": "object",
+      "properties": {
+        "low": {
+          "type": "object",
+          "properties": {
+            "lenses": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "correctness",
+                  "security",
+                  "performance",
+                  "tests",
+                  "react-native"
+                ]
+              }
+            },
+            "secondCorrectnessPass": {
+              "type": "boolean"
+            },
+            "allowExecution": {
+              "type": "boolean"
+            },
+            "maxVerified": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "parallel": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "additionalProperties": false
+        },
+        "medium": {
+          "type": "object",
+          "properties": {
+            "lenses": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "correctness",
+                  "security",
+                  "performance",
+                  "tests",
+                  "react-native"
+                ]
+              }
+            },
+            "secondCorrectnessPass": {
+              "type": "boolean"
+            },
+            "allowExecution": {
+              "type": "boolean"
+            },
+            "maxVerified": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "parallel": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "additionalProperties": false
+        },
+        "high": {
+          "type": "object",
+          "properties": {
+            "lenses": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "correctness",
+                  "security",
+                  "performance",
+                  "tests",
+                  "react-native"
+                ]
+              }
+            },
+            "secondCorrectnessPass": {
+              "type": "boolean"
+            },
+            "allowExecution": {
+              "type": "boolean"
+            },
+            "maxVerified": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "parallel": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "scoring": {
+      "type": "object",
+      "properties": {
+        "severity": {
+          "type": "object",
+          "properties": {
+            "critical": {
+              "type": "number",
+              "minimum": 0
+            },
+            "high": {
+              "type": "number",
+              "minimum": 0
+            },
+            "medium": {
+              "type": "number",
+              "minimum": 0
+            },
+            "low": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false
+        },
+        "confidence": {
+          "type": "object",
+          "properties": {
+            "confirmed": {
+              "type": "object",
+              "properties": {
+                "executed": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "traced": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "reasoned": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "additionalProperties": false
+            },
+            "uncertain": {
+              "type": "number",
+              "minimum": 0
+            },
+            "refuted": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false
+        },
+        "impact": {
+          "type": "object",
+          "properties": {
+            "user-facing": {
+              "type": "number",
+              "minimum": 0
+            },
+            "developer-facing": {
+              "type": "number",
+              "minimum": 0
+            },
+            "internal": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false
+        },
+        "fixBeforeMergeThreshold": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "ignore": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "publish": {
+      "type": "object",
+      "properties": {
+        "includeFollowUps": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
