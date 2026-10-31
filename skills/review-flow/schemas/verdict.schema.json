@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "candidate_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "verdict": {
+      "type": "string",
+      "enum": [
+        "confirmed",
+        "refuted",
+        "uncertain"
+      ]
+    },
+    "evidence_type": {
+      "type": "string",
+      "enum": [
+        "executed",
+        "traced",
+        "reasoned"
+      ]
+    },
+    "evidence": {
+      "type": "string",
+      "minLength": 1
+    },
+    "severity_reassessed": {
+      "type": "string",
+      "enum": [
+        "critical",
+        "high",
+        "medium",
+        "low"
+      ]
+    },
+    "impact": {
+      "type": "string",
+      "enum": [
+        "user-facing",
+        "developer-facing",
+        "internal"
+      ]
+    },
+    "fix_assessment": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "ok",
+            "incomplete",
+            "wrong",
+            "absent"
+          ]
+        },
+        "notes": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "notes"
+      ],
+      "additionalProperties": false
+    },
+    "effort": {
+      "type": "string",
+      "enum": [
+        "trivial",
+        "small",
+        "medium",
+        "large"
+      ]
+    }
+  },
+  "required": [
+    "candidate_id",
+    "verdict",
+    "evidence_type",
+    "evidence",
+    "severity_reassessed",
+    "impact",
+    "fix_assessment",
+    "effort"
+  ],
+  "additionalProperties": false
+}
