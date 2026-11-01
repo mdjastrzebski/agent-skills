@@ -3997,6 +3997,8 @@ function currentDiff(repoRoot, mergeBase, ignore) {
 	], [0, 1]);
 	return patch;
 }
+/** The §4 "second correctness pass" at high rigor; not a config lens name, it follows `correctness`. */
+const SECOND_CORRECTNESS_LENS = "correctness-alt";
 function builtinLens(name) {
 	return {
 		name,
@@ -4016,10 +4018,13 @@ function resolveLenses(repoRoot, config, hasSpecs, only) {
 			output: `findings/${name}.json`
 		});
 	}
-	if (!only) return lenses;
-	const unknown = only.filter((name) => !lenses.some((lens) => lens.name === name) && !BUILTIN_LENSES.includes(name));
+	const known = [...BUILTIN_LENSES, SECOND_CORRECTNESS_LENS];
+	const unknown = (only ?? []).filter((name) => !lenses.some((lens) => lens.name === name) && !known.includes(name));
 	if (unknown.length) throw new PrepareError(`unknown lens(es): ${unknown.join(", ")}`);
-	return only.map((name) => lenses.find((lens) => lens.name === name) ?? builtinLens(name));
+	const chosen = only ? only.map((name) => lenses.find((lens) => lens.name === name) ?? builtinLens(name)) : lenses;
+	const index = chosen.findIndex((lens) => lens.name === "correctness");
+	if (preset.secondCorrectnessPass && index >= 0 && !chosen.some((lens) => lens.name === "correctness-alt")) chosen.splice(index + 1, 0, builtinLens(SECOND_CORRECTNESS_LENS));
+	return chosen;
 }
 function prepare(options) {
 	const repoRoot = realpathSync(options.repoRoot);
@@ -4107,6 +4112,7 @@ function prepareIn(repoRoot, options) {
 			allowExecution: preset.allowExecution
 		},
 		models: config.models[harness],
+		scoring: config.scoring,
 		lenses: resolveLenses(repoRoot, config, specs.length > 0, options.lenses),
 		specs,
 		stack,
@@ -4191,4 +4197,4 @@ function main(argv) {
 	}
 }
 if (isEntry(import.meta.url, "prepare")) process.exitCode = main(process.argv.slice(2));
-export { PrepareError, main, prepare };
+export { PrepareError, SECOND_CORRECTNESS_LENS, main, prepare };

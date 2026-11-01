@@ -11,7 +11,7 @@ Your task message gives you the **run directory** (`<runDir>`) and your **candid
 3. `<runDir>/diff.patch`: the change under review.
 4. Files under `code_root`: the flagged file, then whatever you need to confirm or refute the claim (callers, callees, types, guards, tests, config).
 
-**Independence:** don't open `<runDir>/findings/`, `<runDir>/candidates.json`, other files in `<runDir>/candidates/`, `<runDir>/verdicts/` (except your own output), or `report.md`. Judge this claim on the code alone.
+**Independence:** don't open `<runDir>/findings/`, `<runDir>/candidates.json`, `<runDir>/possible-duplicates.json`, other files in `<runDir>/candidates/`, `<runDir>/verdicts/` (except your own output), `ranked.json` or `report.md`. Judge this claim on the code alone.
 
 ## Rules
 

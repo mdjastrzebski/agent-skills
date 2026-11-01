@@ -18,6 +18,63 @@ function isEntry(moduleUrl, name) {
 function readContext(runDir) {
 	return JSON.parse(readFileSync(join(runDir, "context.json"), "utf8"));
 }
+// src/git.ts
+var GitError = class extends Error {};
+let env = {
+	...process.env,
+	GIT_OPTIONAL_LOCKS: "0"
+};
+/**
+* Runs git in `cwd` and returns stdout. `okCodes` lists the exit codes that count as success
+* (`git diff --no-index` exits 1 when the files differ).
+*/
+function git(cwd, args, okCodes = [0]) {
+	const result = spawnSync("git", args, {
+		cwd,
+		env,
+		encoding: "utf8",
+		maxBuffer: 268435456
+	});
+	if (result.error) throw new GitError(`git ${args.join(" ")}: ${result.error.message}`);
+	if (!okCodes.includes(result.status ?? -1)) throw new GitError(`git ${args.join(" ")} failed: ${result.stderr.trim() || `exit ${result.status}`}`);
+	return result.stdout;
+}
+function tryGit(cwd, args) {
+	try {
+		return git(cwd, args).trim();
+	} catch {
+		return null;
+	}
+}
+function repoRootFrom(dir) {
+	return tryGit(dir, ["rev-parse", "--show-toplevel"]);
+}
+// src/run-dir.ts
+/** Every run lives under `<repo>/.review-flow/runs/`. */
+const RUNS_DIR = join(".review-flow", "runs");
+var RunDirError = class extends Error {};
+function isInside(child, parent) {
+	const rel = relative(parent, child);
+	return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
+}
+/**
+* Resolves a run-directory argument and refuses anything outside `<repo>/.review-flow/runs/`.
+* Returns the real path of the run directory and of the repo that owns it.
+*/
+function resolveRunDir(arg) {
+	const abs = resolve(arg);
+	if (!existsSync(abs) || !statSync(abs).isDirectory()) throw new RunDirError(`run directory not found: ${arg}`);
+	const runDir = realpathSync(abs);
+	const repoRoot = repoRootFrom(runDir);
+	if (!repoRoot || !isInside(runDir, join(realpathSync(repoRoot), RUNS_DIR))) throw new RunDirError(`refusing ${arg}: run directories must be inside <repo>/${RUNS_DIR.split(sep).join("/")}/`);
+	return {
+		runDir,
+		repoRoot: realpathSync(repoRoot)
+	};
+}
+function appendTrace(runDir, entry) {
+	appendFileSync(join(runDir, "trace.jsonl"), `${JSON.stringify(entry)}\n`);
+}
 Object.freeze({ status: "aborted" });
 /* @__NO_SIDE_EFFECTS__ */
 function $constructor(name, initializer, params) {
@@ -3226,87 +3283,110 @@ function collectFindings(runDir, context) {
 		outcomes
 	};
 }
-// src/git.ts
-var GitError = class extends Error {};
-let env = {
-	...process.env,
-	GIT_OPTIONAL_LOCKS: "0"
-};
-/**
-* Runs git in `cwd` and returns stdout. `okCodes` lists the exit codes that count as success
-* (`git diff --no-index` exits 1 when the files differ).
-*/
-function git(cwd, args, okCodes = [0]) {
-	const result = spawnSync("git", args, {
-		cwd,
-		env,
-		encoding: "utf8",
-		maxBuffer: 268435456
-	});
-	if (result.error) throw new GitError(`git ${args.join(" ")}: ${result.error.message}`);
-	if (!okCodes.includes(result.status ?? -1)) throw new GitError(`git ${args.join(" ")} failed: ${result.stderr.trim() || `exit ${result.status}`}`);
-	return result.stdout;
-}
-function tryGit(cwd, args) {
-	try {
-		return git(cwd, args).trim();
-	} catch {
-		return null;
-	}
-}
-function repoRootFrom(dir) {
-	return tryGit(dir, ["rev-parse", "--show-toplevel"]);
-}
-// src/run-dir.ts
-/** Every run lives under `<repo>/.review-flow/runs/`. */
-const RUNS_DIR = join(".review-flow", "runs");
-var RunDirError = class extends Error {};
-function isInside(child, parent) {
-	const rel = relative(parent, child);
-	return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
-}
-/**
-* Resolves a run-directory argument and refuses anything outside `<repo>/.review-flow/runs/`.
-* Returns the real path of the run directory and of the repo that owns it.
-*/
-function resolveRunDir(arg) {
-	const abs = resolve(arg);
-	if (!existsSync(abs) || !statSync(abs).isDirectory()) throw new RunDirError(`run directory not found: ${arg}`);
-	const runDir = realpathSync(abs);
-	const repoRoot = repoRootFrom(runDir);
-	if (!repoRoot || !isInside(runDir, join(realpathSync(repoRoot), RUNS_DIR))) throw new RunDirError(`refusing ${arg}: run directories must be inside <repo>/${RUNS_DIR.split(sep).join("/")}/`);
-	return {
-		runDir,
-		repoRoot: realpathSync(repoRoot)
-	};
-}
-function appendTrace(runDir, entry) {
-	appendFileSync(join(runDir, "trace.jsonl"), `${JSON.stringify(entry)}\n`);
-}
 // src/dedup.ts
 /**
-* Stage 3 (stub until step 5): turns reviewer findings into verification candidates.
-* No clustering yet: one candidate per valid finding, ordered by severity, file and line, cut to `limits.maxVerified`.
+* Stage 3: turns reviewer findings into verification candidates.
+* Findings in the same file and category whose line ranges overlap or lie within ±3 lines form one cluster
+* (transitively), which becomes one candidate. Candidates are ordered by severity, file and line, then cut to
+* `limits.maxVerified`.
 *
 * Usage: node scripts/dist/dedup.mjs <runDir>
 *
 * Writes `candidates.json` (Candidate[]), plus `candidates/<id>.json` holding that one candidate: verifiers read only
 * their own file, so no verifier's input contains another candidate. Also recreates an empty `verdicts/` for their
 * output, since candidate ids are positional and old verdicts may not match the new candidates.
+* Pairs that may still be duplicates (same file within ±10 lines but another category, or similar wording) go to
+* `possible-duplicates.json` for the optional merger pass.
 * Prints a summary, then `candidates: <id> <id> …` as the last line of stdout.
 * Exit 0 on success, 2 on usage errors or an unusable run directory.
 */
-function toCandidates(findings, maxVerified) {
+/** Same file and category, at most this many lines apart: one cluster. */
+const CLUSTER_LINES = 3;
+/** Same file, another category, at most this many lines apart: a possible duplicate. */
+const NEARBY_LINES = 10;
+/** Jaccard similarity of title + claim words at or above which two candidates are possible duplicates. */
+const SIMILARITY_THRESHOLD = .5;
+/** Lines strictly between two ranges; 0 when they overlap or touch. */
+function lineGap(a, b) {
+	return Math.max(0, Math.max(a.line_start, b.line_start) - Math.min(a.line_end, b.line_end));
+}
+/** Groups findings (already sorted) into clusters, each in input order. Clusters are linked transitively. */
+function clusterFindings(findings) {
+	const parent = findings.map((_, index) => index);
+	const root = (i) => parent[i] === i ? i : parent[i] = root(parent[i]);
+	for (let i = 0; i < findings.length; i++) for (let j = i + 1; j < findings.length; j++) {
+		const [a, b] = [findings[i], findings[j]];
+		if (a.file === b.file && a.category === b.category && lineGap(a, b) <= 3) {
+			const [ri, rj] = [root(i), root(j)];
+			parent[Math.max(ri, rj)] = Math.min(ri, rj);
+		}
+	}
+	const clusters = /* @__PURE__ */ new Map();
+	findings.forEach((finding, index) => {
+		const key = root(index);
+		clusters.set(key, [...clusters.get(key) ?? [], finding]);
+	});
+	return [...clusters.values()];
+}
+/** A cluster's first finding speaks for it, over the union of the cluster's lines. */
+function mergeCluster(cluster) {
+	const [primary] = cluster;
 	return {
-		candidates: findings.slice(0, maxVerified).map((finding, index) => ({
-			...finding,
-			id: `c-${index + 1}`,
-			source_ids: [finding.id]
-		})),
-		findings: findings.length,
-		overLimit: findings.slice(maxVerified)
+		...primary,
+		line_start: Math.min(...cluster.map((f) => f.line_start)),
+		line_end: Math.max(...cluster.map((f) => f.line_end)),
+		source_ids: cluster.map((f) => f.id)
 	};
 }
+const STOPWORDS = new Set("the and for with that this when from not are but can its has have was were will into than then also only does".split(" "));
+function words(text) {
+	return new Set((text.toLowerCase().match(/[a-z0-9_]+/g) ?? []).filter((word) => word.length >= 3 && !STOPWORDS.has(word)));
+}
+function similarity(a, b) {
+	const [wa, wb] = [words(a), words(b)];
+	const shared = [...wa].filter((word) => wb.has(word)).length;
+	const union = wa.size + wb.size - shared;
+	return union === 0 ? 0 : shared / union;
+}
+function findPossibleDuplicates(candidates) {
+	const pairs = [];
+	for (let i = 0; i < candidates.length; i++) for (let j = i + 1; j < candidates.length; j++) {
+		const [a, b] = [candidates[i], candidates[j]];
+		const score = Math.round(similarity(`${a.title} ${a.claim}`, `${b.title} ${b.claim}`) * 100) / 100;
+		const nearby = a.file === b.file && a.category !== b.category && lineGap(a, b) <= 10;
+		if (nearby || score >= .5) pairs.push({
+			a: a.id,
+			b: b.id,
+			reason: nearby ? "nearby" : "similar",
+			similarity: score
+		});
+	}
+	return pairs;
+}
+function toCandidates(findings, maxVerified) {
+	const clusters = clusterFindings(findings.toSorted(compareFindings)).map((cluster) => ({
+		cluster,
+		merged: mergeCluster(cluster)
+	})).toSorted((a, b) => compareFindings({
+		...a.merged,
+		id: a.cluster[0].id
+	}, {
+		...b.merged,
+		id: b.cluster[0].id
+	}));
+	const candidates = clusters.slice(0, maxVerified).map(({ merged }, index) => ({
+		...merged,
+		id: `c-${index + 1}`
+	}));
+	return {
+		candidates,
+		findings: findings.length,
+		clusters: clusters.length,
+		overLimit: clusters.slice(maxVerified).flatMap(({ cluster }) => cluster),
+		possibleDuplicates: findPossibleDuplicates(candidates)
+	};
+}
+const json = (value) => `${JSON.stringify(value, null, 2)}\n`;
 function dedup(runDirArg) {
 	const startedAt = /* @__PURE__ */ new Date();
 	const { runDir } = resolveRunDir(runDirArg);
@@ -3317,13 +3397,14 @@ function dedup(runDirArg) {
 		throw new RunDirError(`cannot read ${join(runDir, "context.json")}: ${error.message}`);
 	}
 	const result = toCandidates(collectFindings(runDir, context).findings, context.limits.maxVerified);
-	writeFileSync(join(runDir, "candidates.json"), `${JSON.stringify(result.candidates, null, 2)}\n`);
+	writeFileSync(join(runDir, "candidates.json"), json(result.candidates));
+	writeFileSync(join(runDir, "possible-duplicates.json"), json(result.possibleDuplicates));
 	rmSync(join(runDir, "candidates"), {
 		recursive: true,
 		force: true
 	});
 	mkdirSync(join(runDir, "candidates"));
-	for (const candidate of result.candidates) writeFileSync(join(runDir, "candidates", `${candidate.id}.json`), `${JSON.stringify(candidate, null, 2)}\n`);
+	for (const candidate of result.candidates) writeFileSync(join(runDir, "candidates", `${candidate.id}.json`), json(candidate));
 	rmSync(join(runDir, "verdicts"), {
 		recursive: true,
 		force: true
@@ -3335,7 +3416,9 @@ function dedup(runDirArg) {
 		started_at: startedAt.toISOString(),
 		duration_ms: Date.now() - startedAt.getTime(),
 		findings: result.findings,
-		candidates: result.candidates.length
+		clusters: result.clusters,
+		candidates: result.candidates.length,
+		possible_duplicates: result.possibleDuplicates.length
 	});
 	return result;
 }
@@ -3345,8 +3428,9 @@ function main(argv) {
 		return 2;
 	}
 	try {
-		const { candidates, findings, overLimit } = dedup(argv[0]);
-		console.log(`${candidates.length} candidate(s) to verify from ${findings} finding(s)${overLimit.length ? `; ${overLimit.length} over the verification limit, left unverified` : ""}`);
+		const { candidates, findings, clusters, overLimit, possibleDuplicates } = dedup(argv[0]);
+		console.log(`${candidates.length} candidate(s) to verify from ${findings} finding(s)${clusters < findings ? ` (${findings - clusters} merged as duplicates)` : ""}${overLimit.length ? `; ${overLimit.length} finding(s) over the verification limit, left unverified` : ""}`);
+		if (possibleDuplicates.length) console.log(`${possibleDuplicates.length} possible duplicate pair(s) in possible-duplicates.json`);
 		console.log(`candidates: ${candidates.map((c) => c.id).join(" ")}`.trimEnd());
 		return 0;
 	} catch (error) {
@@ -3356,4 +3440,4 @@ function main(argv) {
 	}
 }
 if (isEntry(import.meta.url, "dedup")) process.exitCode = main(process.argv.slice(2));
-export { dedup, main, toCandidates };
+export { CLUSTER_LINES, NEARBY_LINES, SIMILARITY_THRESHOLD, clusterFindings, dedup, findPossibleDuplicates, main, similarity, toCandidates };

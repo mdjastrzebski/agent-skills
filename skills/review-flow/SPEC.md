@@ -28,6 +28,7 @@ review-flow/
 │   ├── reviewer.md           # shared reviewer instructions + output contract
 │   ├── lenses/               # one file per lens (focus area)
 │   │   ├── correctness.md
+│   │   ├── correctness-alt.md # high rigor: the second correctness pass (different seed prompt)
 │   │   ├── security.md
 │   │   ├── performance.md
 │   │   ├── tests.md
@@ -132,6 +133,7 @@ snapshot/           # branch mode only: changed files + context read via git sho
 findings/<lens>.json
 candidates.json     # stage 3
 candidates/<id>.json # stage 3: one candidate per file, the only candidate a verifier reads
+possible-duplicates.json # stage 3: pairs for the optional merger pass
 verdicts/<id>.json  # stage 4
 scratch/<id>/       # temporary worktrees (deleted after verification)
 ranked.json         # stage 5
@@ -315,6 +317,7 @@ Each step must be usable on its own. Prefer simple stubs over half-built feature
 - [x] Step 2: Review stage (subagents per lens, findings + validation)
 - [x] Step 3: Walking skeleton (report.mjs + SKILL.md wiring; first dogfood run)
 - [x] Step 4: Verification (read-only verifiers, placeholder ranking; dogfood run)
+- [x] Step 5: Dedup + scoring + rigor (deterministic dedup, score.mjs, second correctness pass)
 
 ### Next steps
 
@@ -331,13 +334,13 @@ Goal: a complete run that produces a report, even without verification.
 - Report buckets: Confirmed / Needs judgment / Dismissed.
 - **Done when:** every reported item has a verdict file, and dogfooding this step's diff shows refuted items filtered out.
 
-#### Step 5. Dedup + scoring + rigor (the next thing to build)
+#### Step 5. Dedup + scoring + rigor
 - Stage 3 deterministic `dedup.mjs` (the merger LLM pass is optional and can come later).
 - Stage 5 `score.mjs` with the §8 formula and buckets, deterministic output.
 - The `rigor` input (§4 table minus execution).
 - Unit tests (vitest) for dedup, scoring and report rendering.
 
-#### Step 6. Executed verification
+#### Step 6. Executed verification (the next thing to build)
 - `scratch.mjs` worktrees (for `current` mode: HEAD plus uncommitted changes applied, `node_modules` symlinked).
 - Verifiers may write repros and run check commands, producing `executed` evidence.
 - Acceptance check: the user's tree, index and stash are unchanged after a run.

@@ -80,6 +80,9 @@ function currentDiff(repoRoot: string, mergeBase: string, ignore: string[]): str
   return patch;
 }
 
+/** The §4 "second correctness pass" at high rigor; not a config lens name, it follows `correctness`. */
+export const SECOND_CORRECTNESS_LENS = "correctness-alt";
+
 function builtinLens(name: string): Lens {
   return { name, prompt: join(skillDir(), "prompts", "lenses", `${name}.md`), output: `findings/${name}.json` };
 }
@@ -98,12 +101,15 @@ function resolveLenses(
     const name = basename(path).replace(/\.md$/, "");
     lenses.push({ name, prompt: resolve(repoRoot, path), output: `findings/${name}.json` });
   }
-  if (!only) return lenses;
-  const unknown = only.filter(
-    (name) => !lenses.some((lens) => lens.name === name) && !(BUILTIN_LENSES as readonly string[]).includes(name),
-  );
+  const known = [...BUILTIN_LENSES, SECOND_CORRECTNESS_LENS] as readonly string[];
+  const unknown = (only ?? []).filter((name) => !lenses.some((lens) => lens.name === name) && !known.includes(name));
   if (unknown.length) throw new PrepareError(`unknown lens(es): ${unknown.join(", ")}`);
-  return only.map((name) => lenses.find((lens) => lens.name === name) ?? builtinLens(name));
+  const chosen = only ? only.map((name) => lenses.find((lens) => lens.name === name) ?? builtinLens(name)) : lenses;
+  // High rigor: a second correctness reviewer with a different seed prompt runs wherever correctness runs.
+  const index = chosen.findIndex((lens) => lens.name === "correctness");
+  if (preset.secondCorrectnessPass && index >= 0 && !chosen.some((lens) => lens.name === SECOND_CORRECTNESS_LENS))
+    chosen.splice(index + 1, 0, builtinLens(SECOND_CORRECTNESS_LENS));
+  return chosen;
 }
 
 export function prepare(options: PrepareOptions): { runDir: string; context: Context } {
@@ -185,6 +191,7 @@ function prepareIn(repoRoot: string, options: PrepareOptions): { runDir: string;
     rigor: config.rigor,
     limits: { maxVerified: preset.maxVerified, parallel: preset.parallel, allowExecution: preset.allowExecution },
     models: config.models[harness],
+    scoring: config.scoring,
     lenses: resolveLenses(repoRoot, config, specs.length > 0, options.lenses),
     specs,
     stack,

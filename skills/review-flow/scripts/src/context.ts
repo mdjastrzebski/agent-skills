@@ -1,5 +1,6 @@
 import { lstatSync, readFileSync } from "node:fs";
 import { extname, join, posix } from "node:path";
+import type { Config } from "./config-schema.js";
 import type { Checks, Stack } from "./detect.js";
 import type { DiffFile } from "./diff.js";
 
@@ -60,6 +61,8 @@ export type Context = {
   rigor: string;
   limits: { maxVerified: number; parallel: number; allowExecution: boolean };
   models: { reviewer: string; merger: string; verifier: string };
+  /** §8 weights from the effective config, copied so re-scoring a run never depends on today's config. */
+  scoring: Config["scoring"];
   lenses: Lens[];
   /** Spec documents the spec lens checks against, relative to `code_root`. */
   specs: string[];

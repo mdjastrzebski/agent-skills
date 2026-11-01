@@ -150,6 +150,28 @@ describe("prepare (current mode)", () => {
     expect(() => run(root, { lenses: ["style"] })).toThrow(/unknown lens/);
   });
 
+  it("adds the second correctness pass at high rigor, right after correctness, and records the weights", () => {
+    const root = repo();
+    const high = run(root, { rigor: "high" }).context;
+    expect(high.lenses.map((l) => l.name)).toEqual([
+      "correctness",
+      "correctness-alt",
+      "security",
+      "tests",
+      "performance",
+    ]);
+    expect(existsSync(high.lenses[1].prompt)).toBe(true);
+    expect(high.limits).toEqual({ maxVerified: 50, parallel: 6, allowExecution: true });
+    expect(high.scoring.fixBeforeMergeThreshold).toBe(5);
+    expect(run(root, { rigor: "high", lenses: ["correctness"] }).context.lenses.map((l) => l.name)).toEqual([
+      "correctness",
+      "correctness-alt",
+    ]);
+    expect(run(root, { rigor: "high", lenses: ["tests"] }).context.lenses.map((l) => l.name)).toEqual(["tests"]);
+    expect(run(root, { lenses: ["correctness-alt"] }).context.lenses.map((l) => l.name)).toEqual(["correctness-alt"]);
+    expect(run(root, { sets: ["scoring.fixBeforeMergeThreshold=3"] }).context.scoring.fixBeforeMergeThreshold).toBe(3);
+  });
+
   it("prefers origin/<base> for a bare base name and passes other refs through", () => {
     const root = repo();
     const initial = sh(root, "rev-parse", "main").trim();

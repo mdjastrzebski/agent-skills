@@ -9,7 +9,7 @@ Review the user's current code with parallel lens reviewers, verify every findin
 
 `<skill>` below is the directory that contains this SKILL.md. Resolve it to an absolute path before running anything, and run every command from the user's repository.
 
-Status: only `current` mode is implemented. Verifiers read code but don't execute anything yet, and ranking is provisional (confirmed → needs judgment → dismissed; no scoring yet).
+Status: only `current` mode is implemented, and verifiers read code but don't execute anything yet.
 
 ## Hard rules
 
@@ -23,7 +23,7 @@ Status: only `current` mode is implemented. Verifiers read code but don't execut
 
 - **Target.** "My changes", "this", "my branch", or no target → `current`. A named branch or a PR (`branch:<name>`, `pr:<n>`, a PR URL) → tell the user only the current checkout can be reviewed so far, and stop.
 - **Base.** Default: the repo's default branch (detected). "Just my uncommitted changes" → `--base HEAD`. A named base → `--base <ref>`.
-- **Rigor.** `low` | `medium` | `high` if the user names one; otherwise omit (config default, usually `medium`).
+- **Rigor.** `low` | `medium` | `high` if the user names one; otherwise omit (config default, usually `medium`). Rigor sets the lenses (high adds a second correctness pass, `correctness-alt`), how many candidates get verified, and how many subagents run at once; `prepare` resolves all of it into `context.json`.
 - **Lenses.** Only if the user names some: `--lenses a,b`.
 
 ## Stage 1: Prepare
@@ -58,7 +58,7 @@ When all subagents have finished, check that every `<runDir>/<lens.output>` exis
 node <skill>/scripts/dist/dedup.mjs <runDir>
 ```
 
-It turns the valid findings into candidates (`c-1`, `c-2`, …, most severe first, capped at `limits.maxVerified`) and writes one `<runDir>/candidates/<id>.json` per candidate. The last stdout line is `candidates: <id> <id> …`. If it lists none, skip to stage 5. Re-running it empties `verdicts/` (ids are positional), so run it once, before any verifier.
+It merges duplicate findings (same file and category, within 3 lines) and turns the rest into candidates (`c-1`, `c-2`, …, most severe first, capped at `limits.maxVerified`), with one `<runDir>/candidates/<id>.json` per candidate. The last stdout line is `candidates: <id> <id> …`. If it lists none, skip to stage 5. Re-running it empties `verdicts/` (ids are positional), so run it once, before any verifier. It may also report possible duplicate pairs (`possible-duplicates.json`); there is no merger pass yet, so leave them: each is verified on its own.
 
 ## Stage 4: Verify (one subagent per candidate)
 
@@ -75,20 +75,28 @@ Write your verdict to <runDir>/verdicts/<id>.json and validate it as verifier.md
 
 When all have finished, check that every `<runDir>/verdicts/<id>.json` exists. If one is missing, re-spawn that verifier once. Don't write or edit verdicts yourself; the report lists any that are missing or invalid.
 
-## Stage 5: Report
+## Stage 5: Score
+
+```bash
+node <skill>/scripts/dist/score.mjs <runDir>
+```
+
+It scores each verdict (severity × confidence × impact) and writes `<runDir>/ranked.json`, with every candidate in a bucket: Fix before merge, Needs human judgment, Follow-up or Dismissed. Run it after all verifiers have finished; if you re-spawn a verifier later, run it again.
+
+## Stage 6: Report
 
 ```bash
 node <skill>/scripts/dist/report.mjs <runDir>
 ```
 
-It writes `<runDir>/report.md` (buckets: Confirmed, Needs judgment, Dismissed) and prints a summary of at most 10 lines; the last line is the report path. Reply to the user with:
+It writes `<runDir>/report.md` and prints a summary of at most 10 lines; the last line is the report path. Reply to the user with:
 
 - the summary lines (counts and top items) as printed,
-- a note that ranking is provisional and verifiers didn't execute code,
+- a note that verifiers didn't execute code,
 - the path to `report.md`.
 
 Don't paste the whole report. Offer to walk through specific findings if the user wants.
 
 ## Configuration
 
-`node <skill>/scripts/dist/config.mjs show` prints the effective config (built-in defaults < `~/.config/review-flow/config.json` < `<repo>/review-flow.config.json` < `--set key=value`). Useful keys: `rigor`, `base`, `ignore` (globs left out of the diff), `specs` (spec documents for the spec lens; auto-detected when absent), `lenses.enabled`, `lenses.custom`. `prepare.mjs` accepts the same `--set key=value` overrides for one run.
+`node <skill>/scripts/dist/config.mjs show` prints the effective config (built-in defaults < `~/.config/review-flow/config.json` < `<repo>/review-flow.config.json` < `--set key=value`). Useful keys: `rigor`, `rigorPresets`, `scoring` (weights and `fixBeforeMergeThreshold`), `base`, `ignore` (globs left out of the diff), `specs` (spec documents for the spec lens; auto-detected when absent), `lenses.enabled`, `lenses.custom`. `prepare.mjs` accepts the same `--set key=value` overrides for one run.

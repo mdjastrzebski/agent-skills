@@ -1,7 +1,8 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Context } from "./context.js";
-import { type Finding, SEVERITIES } from "./schemas.js";
+import { RunDirError } from "./run-dir.js";
+import { type Candidate, type Finding, SEVERITIES } from "./schemas.js";
 import { validateText } from "./validation.js";
 
 export type LensOutcome = {
@@ -48,4 +49,13 @@ export function collectFindings(runDir: string, context: Context): Collected {
     return { lens, file, status: "ok", count: items.length, errors: [] };
   });
   return { findings: findings.toSorted(compareFindings), outcomes };
+}
+
+/** `candidates.json`, validated; a missing or invalid file means dedup hasn't run (properly). */
+export function readCandidates(runDir: string): Candidate[] {
+  const path = join(runDir, "candidates.json");
+  if (!existsSync(path)) throw new RunDirError(`${path} not found: run dedup.mjs first`);
+  const result = validateText("candidates", readFileSync(path, "utf8"));
+  if (!result.ok) throw new RunDirError(`${path} is invalid: ${result.errors.slice(0, 3).join("; ")}`);
+  return result.data as Candidate[];
 }

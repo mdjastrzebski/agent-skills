@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { loadDefaults } from "../src/config.js";
 import type { Context } from "../src/context.js";
 
 /** A fake run directory inside a real git repo, so the run-dir guard accepts it. */
@@ -34,6 +35,7 @@ export function runDir(
     rigor: "medium",
     limits: { maxVerified, parallel: 4, allowExecution: true },
     models: { reviewer: "sonnet", merger: "haiku", verifier: "opus" },
+    scoring: loadDefaults().scoring,
     lenses: lenses.map((name) => ({
       name,
       prompt: `/skill/prompts/lenses/${name}.md`,
