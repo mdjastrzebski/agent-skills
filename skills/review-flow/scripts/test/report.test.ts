@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync, rmSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -152,6 +152,16 @@ describe("renderReport", () => {
     expect(md).toContain("**Verifier** (refuted, traced)\n\n> Guarded at a.ts:4.");
   });
 
+  it("HTML-escapes dismissed titles, which sit inside raw HTML", () => {
+    const run = runDir(["correctness"]);
+    writeFindings(run.dir, "correctness", [{ ...finding, title: "Unsafe <b>&</b> title" }]);
+    dedup(run.dir);
+    writeVerdict(run.dir, "c-1", { ...traced, candidate_id: "c-1", verdict: "refuted" });
+    const md = render(run);
+    expect(md).toContain("<summary><b>Unsafe &lt;b&gt;&amp;&lt;/b&gt; title</b>");
+    expect(md).not.toContain("<b>&</b>");
+  });
+
   it("lists verification problems and unverified findings separately", () => {
     const run = setup(undefined, 2);
     writeVerdict(run.dir, "c-1", { ...traced, candidate_id: "c-1" });
@@ -206,6 +216,8 @@ describe("report", () => {
   it("refuses a run directory without context.json or candidates.json", () => {
     const { dir } = runDir();
     expect(() => report(dir)).toThrow(/candidates\.json not found: run dedup\.mjs first/);
+    writeFileSync(join(dir, "candidates.json"), "{ broken");
+    expect(() => report(dir)).toThrow(/candidates\.json is invalid: \(root\): invalid JSON/);
     rmSync(join(dir, "context.json"));
     expect(() => report(dir)).toThrow(/cannot read .*context\.json/);
   });

@@ -51,6 +51,15 @@ describe("dedup (stub)", () => {
     expect(overLimit.map((f) => f.id)).toEqual(["correctness-3"]);
   });
 
+  it("clears verdicts from an earlier dedup, whose ids may now name other findings", () => {
+    const { dir } = runDir(["correctness"]);
+    writeFindings(dir, "correctness", [finding]);
+    dedup(dir);
+    writeFileSync(join(dir, "verdicts", "c-1.json"), "{}");
+    dedup(dir);
+    expect(readdirSync(join(dir, "verdicts"))).toEqual([]);
+  });
+
   it("is byte-identical on re-runs and removes stale candidate files", () => {
     const { dir } = runDir(["correctness"]);
     writeFindings(dir, "correctness", [finding, { ...finding, id: "correctness-2" }]);

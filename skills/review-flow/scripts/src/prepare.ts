@@ -45,7 +45,8 @@ function pathspec(ignore: string[]): string[] {
 function resolveBaseRef(repoRoot: string, base: string): string {
   if (base !== "HEAD" && !base.includes("/")) {
     for (const ref of [`refs/remotes/origin/${base}`, `refs/heads/${base}`]) {
-      if (tryGit(repoRoot, ["rev-parse", "--verify", "--quiet", ref]) !== null)
+      // show-ref matches exact refs only; rev-parse would also accept `refs/remotes/origin/HEAD~1` for `HEAD~1`.
+      if (tryGit(repoRoot, ["show-ref", "--verify", "--quiet", ref]) !== null)
         return ref.replace(/^refs\/(heads|remotes)\//, "");
     }
   }

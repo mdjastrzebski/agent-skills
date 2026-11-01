@@ -160,6 +160,15 @@ describe("prepare (current mode)", () => {
     expect(run(root, { base: "origin/main" }).context.target.base_ref).toBe("origin/main");
   });
 
+  it("passes revision expressions through instead of prefixing origin/", () => {
+    const root = repo();
+    // origin/main has a parent, so `origin/HEAD~1` resolves too and must not be picked for `HEAD~1`.
+    sh(root, "update-ref", "refs/remotes/origin/main", sh(root, "rev-parse", "feature").trim());
+    sh(root, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
+    expect(run(root, { base: "HEAD~1" }).context.target.base_ref).toBe("HEAD~1");
+    expect(run(root, { base: "main~0" }).context.target.base_ref).toBe("main~0");
+  });
+
   it("resolves custom lenses and the lenses.enabled filter", () => {
     const root = repo();
     const custom = run(root, {

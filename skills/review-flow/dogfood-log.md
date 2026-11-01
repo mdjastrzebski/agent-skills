@@ -26,3 +26,25 @@ Found by dogfooding, outside the report:
 - **Miss (caught by a mutation check):** `GIT_OPTIONAL_LOCKS=0` does not stop `git diff` from rewriting a stale index. prepare now runs all git reads against a throwaway copy of the index (`GIT_INDEX_FILE`).
 
 False positives: none clear-cut. Most findings were low-severity and valid, which is expected without a verifier.
+
+## Step 4: verification (2026-11-01)
+
+Run: `current --base HEAD~1` (the step-4 commit plus the uncommitted base-ref fix below, 14 files), rigor medium, Claude Code, reviewers on sonnet, verifiers on opus. Lenses: correctness 1, security 1, tests 3, performance 0, spec 2. 7 candidates, all verified: 5 confirmed (1 medium, 4 low), 2 refuted, 0 uncertain, no missing or invalid verdicts. Refuted items landed in Dismissed as intended.
+
+Fixed (confirmed):
+- c-1 (correctness-1, medium): re-running `dedup.mjs` kept old `verdicts/c-<n>.json`, which then bound to whatever finding took that positional id. dedup now empties `verdicts/`.
+- c-3 (tests-2): added a test for an invalid `candidates.json`.
+- c-5 (tests-1): added a test for HTML escaping of dismissed titles.
+- c-7 (spec-1): step 4 was ticked before its dogfood run; this run closes that.
+
+Deferred (confirmed, low):
+- c-4 (security-1): reviewer/verifier text goes into `report.md` unescaped, and a `</details>` in a dismissed item's claim or evidence would break the layout. Same call as step 3's security-2: the report is local, and escaping belongs in `renderReview` (step 9). The verifier rated the suggested blanket `html()` fix `incomplete` (it would garble inline code spans), which is a useful nuance.
+
+Dismissed by verifiers (both correct):
+- c-2 (spec-2): "unrelated prepare.ts fix bundled into step 4": it was uncommitted work in progress, not part of the step commit. The verifier checked with `git show --stat HEAD`.
+- c-6 (tests-3): "CLI tests run stale dist": a pre-existing, deliberate convention, and src is covered by direct imports.
+
+Found by dogfooding, outside the report:
+- **Miss (caught by running it):** `prepare --base HEAD~1` reviewed against `origin/HEAD~1` (57 files instead of 14). `resolveBaseRef` tried `refs/remotes/origin/<base>` with `rev-parse --verify`, which also resolves revision expressions. Fixed with `show-ref --verify`, plus a regression test that fails without the fix. Bug from step 3; no reviewer had flagged it. Eval fixture idea: "ref-name lookup that accepts revision syntax".
+
+Verifier observations: verdicts were well-argued, with file:line traces. Verifiers used read-only git commands (`git show`, `git status`) for context, which verifier.md allows. Total: 5 reviewers + 7 verifiers, about 30 s each.

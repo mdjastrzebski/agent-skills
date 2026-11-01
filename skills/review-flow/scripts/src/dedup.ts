@@ -5,7 +5,8 @@
  * Usage: node scripts/dist/dedup.mjs <runDir>
  *
  * Writes `candidates.json` (Candidate[]), plus `candidates/<id>.json` holding that one candidate: verifiers read only
- * their own file, so no verifier's input contains another candidate. Also creates `verdicts/` for their output.
+ * their own file, so no verifier's input contains another candidate. Also recreates an empty `verdicts/` for their
+ * output, since candidate ids are positional and old verdicts may not match the new candidates.
  * Prints a summary, then `candidates: <id> <id> …` as the last line of stdout.
  * Exit 0 on success, 2 on usage errors or an unusable run directory.
  */
@@ -42,7 +43,9 @@ export function dedup(runDirArg: string): DedupResult {
   mkdirSync(join(runDir, "candidates"));
   for (const candidate of result.candidates)
     writeFileSync(join(runDir, "candidates", `${candidate.id}.json`), `${JSON.stringify(candidate, null, 2)}\n`);
-  mkdirSync(join(runDir, "verdicts"), { recursive: true });
+  // Ids are positional, so a verdict from an earlier dedup could belong to a different finding: start clean.
+  rmSync(join(runDir, "verdicts"), { recursive: true, force: true });
+  mkdirSync(join(runDir, "verdicts"));
   appendTrace(runDir, {
     step: "dedup",
     status: "ok",

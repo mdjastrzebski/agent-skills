@@ -314,7 +314,7 @@ Each step must be usable on its own. Prefer simple stubs over half-built feature
 - [x] Step 1: Prepare stage (`current` mode)
 - [x] Step 2: Review stage (subagents per lens, findings + validation)
 - [x] Step 3: Walking skeleton (report.mjs + SKILL.md wiring; first dogfood run)
-- [x] Step 4: Verification (read-only verifiers, placeholder ranking; dogfood run pending)
+- [x] Step 4: Verification (read-only verifiers, placeholder ranking; dogfood run)
 
 ### Next steps
 

@@ -58,7 +58,7 @@ When all subagents have finished, check that every `<runDir>/<lens.output>` exis
 node <skill>/scripts/dist/dedup.mjs <runDir>
 ```
 
-It turns the valid findings into candidates (`c-1`, `c-2`, …, most severe first, capped at `limits.maxVerified`) and writes one `<runDir>/candidates/<id>.json` per candidate. The last stdout line is `candidates: <id> <id> …`. If it lists none, skip to stage 5.
+It turns the valid findings into candidates (`c-1`, `c-2`, …, most severe first, capped at `limits.maxVerified`) and writes one `<runDir>/candidates/<id>.json` per candidate. The last stdout line is `candidates: <id> <id> …`. If it lists none, skip to stage 5. Re-running it empties `verdicts/` (ids are positional), so run it once, before any verifier.
 
 ## Stage 4: Verify (one subagent per candidate)
 

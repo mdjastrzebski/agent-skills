@@ -3947,7 +3947,7 @@ function pathspec(ignore) {
 function resolveBaseRef(repoRoot, base) {
 	if (base !== "HEAD" && !base.includes("/")) {
 		for (const ref of [`refs/remotes/origin/${base}`, `refs/heads/${base}`]) if (tryGit(repoRoot, [
-			"rev-parse",
+			"show-ref",
 			"--verify",
 			"--quiet",
 			ref
