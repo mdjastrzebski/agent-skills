@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const BUILTIN_LENSES = ["correctness", "security", "performance", "tests", "react-native"] as const;
+export const BUILTIN_LENSES = ["correctness", "security", "performance", "tests", "spec"] as const;
 export const RIGORS = ["low", "medium", "high"] as const;
 
 const NonEmpty = z.string().min(1);
@@ -25,6 +25,8 @@ const Check = NonEmpty.nullable().optional();
 export const Config = z.strictObject({
   rigor: z.enum(RIGORS),
   base: NonEmpty.optional(),
+  // Spec documents for the spec lens, relative to the repo root. Absent = auto-detect, [] = none.
+  specs: z.array(NonEmpty).optional(),
   models: z.strictObject({ claude: RoleModels, cursor: RoleModels }),
   lenses: z.strictObject({ enabled: z.array(Lens), custom: z.array(NonEmpty) }),
   checks: z.strictObject({ typecheck: Check, test: Check }),

@@ -1,0 +1,5 @@
+{
+  // Dogfooding config for this repo: keep generated and bundled files out of review-flow's diffs.
+  "ignore": ["skills/review-flow/scripts/dist/**", "skills/review-flow/schemas/*.json", "**/package-lock.json"],
+  "$schema": "./skills/review-flow/schemas/config.schema.json"
+}

@@ -5,7 +5,7 @@
     "cursor": { "reviewer": "auto", "merger": "auto", "verifier": "auto" }
   },
   "lenses": {
-    "enabled": ["correctness", "security", "tests", "performance", "react-native"],
+    "enabled": ["correctness", "security", "tests", "performance", "spec"],
     "custom": []
   },
   "checks": {},
@@ -18,14 +18,14 @@
       "parallel": 3
     },
     "medium": {
-      "lenses": ["correctness", "security", "tests", "performance"],
+      "lenses": ["correctness", "security", "tests", "performance", "spec"],
       "secondCorrectnessPass": false,
       "allowExecution": true,
       "maxVerified": 25,
       "parallel": 4
     },
     "high": {
-      "lenses": ["correctness", "security", "tests", "performance", "react-native"],
+      "lenses": ["correctness", "security", "tests", "performance", "spec"],
       "secondCorrectnessPass": true,
       "allowExecution": true,
       "maxVerified": 50,

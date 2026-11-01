@@ -62,8 +62,8 @@ describe("defaults.json", () => {
     expect([low.parallel, medium.parallel, high.parallel]).toEqual([3, 4, 6]);
     expect([low.allowExecution, medium.allowExecution, high.allowExecution]).toEqual([false, true, true]);
     expect(low.lenses).toEqual(["correctness", "security"]);
-    expect(medium.lenses).toEqual(["correctness", "security", "tests", "performance"]);
-    expect(high.lenses).toContain("react-native");
+    expect(medium.lenses).toEqual(["correctness", "security", "tests", "performance", "spec"]);
+    expect(high.lenses).toContain("spec");
     expect(high.secondCorrectnessPass).toBe(true);
   });
 

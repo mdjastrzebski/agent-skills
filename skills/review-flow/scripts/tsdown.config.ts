@@ -3,7 +3,7 @@ import { defineConfig, type UserConfig } from "tsdown";
 import { jsonSchemas } from "./src/json-schemas.js";
 
 // CLI entries, each bundled into a self-contained dist/<name>.mjs (zod inlined).
-const entries = ["validate", "config"];
+const entries = ["validate", "config", "prepare", "report"];
 
 function writeJsonSchemas() {
   mkdirSync("../schemas", { recursive: true });

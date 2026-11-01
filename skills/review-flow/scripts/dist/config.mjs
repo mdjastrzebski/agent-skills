@@ -1,8 +1,20 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+// src/cli.ts
+/**
+* True when the module `name` is the script node was started with. Compares real paths (the skill is often
+* installed through a symlink) and the file's stem: bundling inlines other CLI modules into one file, where they
+* share `import.meta.url` but must not run their own `main`.
+*/
+function isEntry(moduleUrl, name) {
+	const script = process.argv[1];
+	if (!script) return false;
+	const self = fileURLToPath(moduleUrl);
+	return basename(self).replace(/\.[^.]+$/, "") === name && realpathSync(script) === realpathSync(self);
+}
 Object.freeze({ status: "aborted" });
 /* @__NO_SIDE_EFFECTS__ */
 function $constructor(name, initializer, params) {
@@ -3035,7 +3047,7 @@ const BUILTIN_LENSES = [
 	"security",
 	"performance",
 	"tests",
-	"react-native"
+	"spec"
 ];
 const RIGORS = [
 	"low",
@@ -3062,6 +3074,7 @@ const Check = NonEmpty.nullable().optional();
 const Config = strictObject({
 	rigor: _enum(RIGORS),
 	base: NonEmpty.optional(),
+	specs: array(NonEmpty).optional(),
 	models: strictObject({
 		claude: RoleModels,
 		cursor: RoleModels
@@ -3504,6 +3517,7 @@ function renderShow(loaded) {
 }
 const EXAMPLES = {
 	base: "main",
+	specs: ["SPEC.md", "docs/specs/feature.md"],
 	checks: {
 		typecheck: "npm run typecheck",
 		test: "npm test"
@@ -3515,7 +3529,7 @@ const EXAMPLES = {
 			"security",
 			"tests",
 			"performance",
-			"react-native"
+			"spec"
 		],
 		custom: ["./.review-flow-lenses/accessibility.md"]
 	}
@@ -3659,5 +3673,5 @@ function main(argv) {
 		return 1;
 	}
 }
-if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) process.exitCode = main(process.argv.slice(2));
+if (isEntry(import.meta.url, "config")) process.exitCode = main(process.argv.slice(2));
 export { ConfigError, REPO_CONFIG_FILE, closestKey, detectLayer, loadConfig, loadDefaults, main, parseJsonc, parseSet, renderInit, renderShow, schemaRef, skillDir, userConfigPath };

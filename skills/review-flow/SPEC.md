@@ -31,7 +31,7 @@ review-flow/
 │   │   ├── security.md
 │   │   ├── performance.md
 │   │   ├── tests.md
-│   │   └── react-native.md   # RN/native specifics (bridging, re-renders, platform diffs)
+│   │   └── spec.md           # adherence to the spec documents (contradictions, missing requirements, scope creep)
 │   ├── merger.md             # LLM merge of near-duplicate clusters
 │   └── verifier.md           # adversarial verification instructions + output contract
 ├── scripts/
@@ -70,7 +70,7 @@ The agent resolves the mode from the user's wording. If the wording is ambiguous
 Rigor controls effort only, never the reporting threshold:
 | | low | medium | high |
 |---|---|---|---|
-| Lenses | correctness, security | + tests, performance | + react-native (when RN is detected), plus a second correctness pass with a different seed prompt |
+| Lenses | correctness, security | + tests, performance, spec (when spec documents are found) | + a second correctness pass with a different seed prompt |
 | Verifier may execute code | no | yes | yes |
 | Max findings verified | 10 | 25 | 50 |
 | Parallel subagents | 3 | 4 | 6 |
@@ -91,13 +91,14 @@ Config is JSON with a `$schema` field that points to `schemas/config.schema.json
   "$schema": "./node_modules/.review-flow/config.schema.json", // or the path printed by `config init`
   "rigor": "medium",
   "base": "main",
+  "specs": ["docs/specs/checkout.md"], // spec documents for the spec lens; default: auto-detect SPEC.md, PRD.md, REQUIREMENTS.md, *.spec.md, specs/**.md near the changed files
   "models": {
     // per harness, because model names differ; roles: reviewer, merger, verifier
     "claude": { "reviewer": "sonnet", "merger": "haiku", "verifier": "opus" },
     "cursor": { "reviewer": "auto", "merger": "auto", "verifier": "auto" }
   },
   "lenses": {
-    "enabled": ["correctness", "security", "tests", "performance", "react-native"],
+    "enabled": ["correctness", "security", "tests", "performance", "spec"],
     "custom": ["./.review-flow-lenses/accessibility.md"] // repo-specific lenses
   },
   "checks": { "typecheck": "yarn tsc --noEmit", "test": "yarn jest --findRelatedTests" }, // overrides auto-detection
@@ -151,6 +152,7 @@ trace.jsonl         # one line per step/subagent: start, end, status, durations
 - Records `code_root` in `context.json`. Reviewers and verifiers read code only from there.
 - Detects the stack (RN, TS, test runner, `tsc` availability) from package.json.
 - Collects context for each changed file: the changed hunks, the full file (capped at ~800 lines), direct imports, and the matching test files.
+- Finds the spec documents for the `spec` lens (config `specs`, else auto-detected) and lists them in `context.json`. In `pr` mode the PR description counts as spec input too.
 - Writes `context.json` with the PR metadata, stack, check commands (`typecheck`, `test`, which may be null), the list of lenses with their prompt file paths, and the limits from the rigor table.
 - Prints the run directory path as the last line of stdout.
 
@@ -310,17 +312,18 @@ Each step must be usable on its own. Prefer simple stubs over half-built feature
 ### Status
 - [x] Step 1: Prepare stage (`current` mode)
 - [x] Step 2: Review stage (subagents per lens, findings + validation)
+- [x] Step 3: Walking skeleton (report.mjs + SKILL.md wiring; first dogfood run)
 
 ### Next steps
 
-#### Step 3. Walking skeleton (the next thing to build)
+#### Step 3. Walking skeleton
 Goal: a complete run that produces a report, even without verification.
 - `report.mjs` (minimal): reads `findings/*.json`, writes `report.md` grouped by severity and file, then the chat summary.
 - SKILL.md wires stages 1 → 2 → report.
 - Claude Code only, `current` mode only, fixed lenses, default models.
 - **Done when:** "review my changes" on this repo produces `report.md`. First dogfood run happens here.
 
-#### Step 4. Verification (the core value)
+#### Step 4. Verification (the core value; the next thing to build)
 - Stage 4 verifier subagents: **read-only**, `traced`/`reasoned` evidence only (no execution yet), independence rules, `Verdict` schema and validation.
 - Placeholder ranking: confirmed first, uncertain second, refuted in Dismissed.
 - Report buckets: Confirmed / Needs judgment / Dismissed.

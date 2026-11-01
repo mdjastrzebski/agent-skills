@@ -17,6 +17,13 @@
       "type": "string",
       "minLength": 1
     },
+    "specs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
     "models": {
       "type": "object",
       "properties": {
@@ -71,7 +78,7 @@
               "security",
               "performance",
               "tests",
-              "react-native"
+              "spec"
             ]
           }
         },
@@ -128,7 +135,7 @@
                   "security",
                   "performance",
                   "tests",
-                  "react-native"
+                  "spec"
                 ]
               }
             },
@@ -163,7 +170,7 @@
                   "security",
                   "performance",
                   "tests",
-                  "react-native"
+                  "spec"
                 ]
               }
             },
@@ -198,7 +205,7 @@
                   "security",
                   "performance",
                   "tests",
-                  "react-native"
+                  "spec"
                 ]
               }
             },

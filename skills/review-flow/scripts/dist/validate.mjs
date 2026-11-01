@@ -1,29 +1,17 @@
 import { readFileSync, realpathSync } from "node:fs";
+import { basename } from "node:path";
 import { fileURLToPath } from "node:url";
-// src/issues.ts
-/** Readable `path: message` lines for zod issues, shared by every script that validates agent-written JSON. */
-function formatPath(path) {
-	if (path.length === 0) return "(root)";
-	return path.map((part, i) => typeof part === "number" ? `[${part}]` : i === 0 ? String(part) : `.${String(part)}`).join("");
-}
-function formatIssue(issue, input) {
-	const where = formatPath(issue.path);
-	switch (issue.code) {
-		case "invalid_value": return `${where}: expected one of ${issue.values.map((v) => JSON.stringify(v)).join(" | ")}, got ${JSON.stringify(valueAt(input, issue.path))}`;
-		case "unrecognized_keys": return `${where}: unknown key(s) ${issue.keys.map((k) => JSON.stringify(k)).join(", ")}`;
-		case "invalid_type": return valueAt(input, issue.path) === void 0 ? `${where}: required ${issue.expected} is missing` : `${where}: expected ${issue.expected}, got ${describe(valueAt(input, issue.path))}`;
-		default: return `${where}: ${issue.message}`;
-	}
-}
-function valueAt(input, path) {
-	let current = input;
-	for (const part of path) current = current?.[part];
-	return current;
-}
-function describe(value) {
-	if (value === null) return "null";
-	if (Array.isArray(value)) return "array";
-	return typeof value === "string" ? `string ${JSON.stringify(value)}` : typeof value;
+// src/cli.ts
+/**
+* True when the module `name` is the script node was started with. Compares real paths (the skill is often
+* installed through a symlink) and the file's stem: bundling inlines other CLI modules into one file, where they
+* share `import.meta.url` but must not run their own `main`.
+*/
+function isEntry(moduleUrl, name) {
+	const script = process.argv[1];
+	if (!script) return false;
+	const self = fileURLToPath(moduleUrl);
+	return basename(self).replace(/\.[^.]+$/, "") === name && realpathSync(script) === realpathSync(self);
 }
 Object.freeze({ status: "aborted" });
 /* @__NO_SIDE_EFFECTS__ */
@@ -3135,15 +3123,32 @@ const KINDS = {
 		item: Verdict
 	}
 };
-// src/validate.ts
-/**
-* Validate a run-directory JSON file against its schema.
-*
-* Usage: node scripts/dist/validate.mjs <findings|candidates|verdict> <file>
-*
-* Exit 0 when valid (prints "ok: <file>"), 1 when invalid (one "path: message" line per issue on stderr),
-* 2 on usage or read errors.
-*/
+// src/issues.ts
+/** Readable `path: message` lines for zod issues, shared by every script that validates agent-written JSON. */
+function formatPath(path) {
+	if (path.length === 0) return "(root)";
+	return path.map((part, i) => typeof part === "number" ? `[${part}]` : i === 0 ? String(part) : `.${String(part)}`).join("");
+}
+function formatIssue(issue, input) {
+	const where = formatPath(issue.path);
+	switch (issue.code) {
+		case "invalid_value": return `${where}: expected one of ${issue.values.map((v) => JSON.stringify(v)).join(" | ")}, got ${JSON.stringify(valueAt(input, issue.path))}`;
+		case "unrecognized_keys": return `${where}: unknown key(s) ${issue.keys.map((k) => JSON.stringify(k)).join(", ")}`;
+		case "invalid_type": return valueAt(input, issue.path) === void 0 ? `${where}: required ${issue.expected} is missing` : `${where}: expected ${issue.expected}, got ${describe(valueAt(input, issue.path))}`;
+		default: return `${where}: ${issue.message}`;
+	}
+}
+function valueAt(input, path) {
+	let current = input;
+	for (const part of path) current = current?.[part];
+	return current;
+}
+function describe(value) {
+	if (value === null) return "null";
+	if (Array.isArray(value)) return "array";
+	return typeof value === "string" ? `string ${JSON.stringify(value)}` : typeof value;
+}
+// src/validation.ts
 function validateValue(kind, input) {
 	const result = KINDS[kind].schema.safeParse(input);
 	if (result.success) return {
@@ -3167,6 +3172,15 @@ function validateText(kind, text) {
 	}
 	return validateValue(kind, input);
 }
+// src/validate.ts
+/**
+* Validate a run-directory JSON file against its schema.
+*
+* Usage: node scripts/dist/validate.mjs <findings|candidates|verdict> <file>
+*
+* Exit 0 when valid (prints "ok: <file>"), 1 when invalid (one "path: message" line per issue on stderr),
+* 2 on usage or read errors.
+*/
 function main(argv) {
 	const [kind, file] = argv;
 	if (!kind || !file || !(kind in KINDS)) {
@@ -3189,5 +3203,5 @@ function main(argv) {
 	for (const line of result.errors) console.error(`  ${line}`);
 	return 1;
 }
-if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) process.exitCode = main(process.argv.slice(2));
+if (isEntry(import.meta.url, "validate")) process.exitCode = main(process.argv.slice(2));
 export { main, validateText, validateValue };

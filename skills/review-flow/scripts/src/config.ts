@@ -12,11 +12,12 @@
  * Exit 0 on success, 1 on config errors (one line per issue on stderr), 2 on usage errors.
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { z } from "zod";
+import { isEntry } from "./cli.js";
 import { Config, ConfigFile, type ConfigLayer, keysAt, schemaAt, unwrap } from "./config-schema.js";
 import { detectBase, detectChecks, detectStack } from "./detect.js";
 import { formatIssue, formatPath } from "./issues.js";
@@ -282,10 +283,11 @@ export function renderShow(loaded: LoadedConfig): string {
 // Shown (commented) for keys whose default is empty or absent, so the file documents their shape.
 const EXAMPLES: Partial<Record<keyof Config, unknown>> = {
   base: "main",
+  specs: ["SPEC.md", "docs/specs/feature.md"],
   checks: { typecheck: "npm run typecheck", test: "npm test" },
   ignore: ["**/*.snap", "**/generated/**"],
   lenses: {
-    enabled: ["correctness", "security", "tests", "performance", "react-native"],
+    enabled: ["correctness", "security", "tests", "performance", "spec"],
     custom: ["./.review-flow-lenses/accessibility.md"],
   },
 };
@@ -433,7 +435,6 @@ export function main(argv: string[]): number {
   }
 }
 
-// Compare real paths: the skill is often installed through a symlink.
-if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
+if (isEntry(import.meta.url, "config")) {
   process.exitCode = main(process.argv.slice(2));
 }
