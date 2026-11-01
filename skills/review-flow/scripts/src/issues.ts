@@ -3,7 +3,9 @@ import type { z } from "zod";
 /** Readable `path: message` lines for zod issues, shared by every script that validates agent-written JSON. */
 export function formatPath(path: PropertyKey[]): string {
   if (path.length === 0) return "(root)";
-  return path.map((part, i) => (typeof part === "number" ? `[${part}]` : i === 0 ? String(part) : `.${String(part)}`)).join("");
+  return path
+    .map((part, i) => (typeof part === "number" ? `[${part}]` : i === 0 ? String(part) : `.${String(part)}`))
+    .join("");
 }
 
 export function formatIssue(issue: z.core.$ZodIssue, input: unknown): string {

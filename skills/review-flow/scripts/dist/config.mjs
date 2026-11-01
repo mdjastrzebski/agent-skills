@@ -3304,7 +3304,10 @@ function parseJsonc(text) {
 			const start = i++;
 			while (i < text.length && text[i] !== "\"") i += text[i] === "\\" ? 2 : 1;
 			out += text.slice(start, ++i);
-		} else if (c === "/" && text[i + 1] === "/") while (i < text.length && text[i] !== "\n") out += " ", i++;
+		} else if (c === "/" && text[i + 1] === "/") while (i < text.length && text[i] !== "\n") {
+			out += " ";
+			i++;
+		}
 		else if (c === "/" && text[i + 1] === "*") {
 			const end = text.indexOf("*/", i + 2);
 			const stop = end === -1 ? text.length : end + 2;
@@ -3562,7 +3565,7 @@ function renderInit(defaults, detected, ref) {
 		"  // review-flow config, shared by the team. Commented keys show built-in defaults (or examples); uncomment to override.",
 		"  // `node <skill>/scripts/dist/config.mjs show` prints the effective config and where each value comes from."
 	];
-	for (const key of keys.filter((key) => !active.includes(key))) {
+	for (const key of keys.filter((k) => !active.includes(k))) {
 		const value = isEmpty(defaults[key]) ? EXAMPLES[key] ?? defaults[key] : defaults[key];
 		lines.push(...block(key, value, true, true));
 	}

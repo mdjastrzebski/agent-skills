@@ -15,3 +15,5 @@ Thumbs.db
 
 # Built Visual Studio Code Extensions
 *.vsix
+### Node
+node_modules/

@@ -1,0 +1,13 @@
+{
+  "name": "agent-skills",
+  "private": true,
+  "scripts": {
+    "lint": "oxlint --deny-warnings skills/review-flow/scripts",
+    "format": "oxfmt skills/review-flow/scripts",
+    "format:check": "oxfmt --check skills/review-flow/scripts"
+  },
+  "devDependencies": {
+    "oxfmt": "^0.75.0",
+    "oxlint": "^1.90.0"
+  }
+}

@@ -58,7 +58,9 @@ export function unwrap(schema: z.ZodType): z.ZodType {
 function deepPartial(schema: z.ZodType): z.ZodType {
   const inner = unwrap(schema) as any;
   if (inner._zod.def.type !== "object") return schema;
-  const shape = Object.fromEntries(Object.entries(inner._zod.def.shape).map(([key, value]) => [key, deepPartial(value as z.ZodType).optional()]));
+  const shape = Object.fromEntries(
+    Object.entries(inner._zod.def.shape).map(([key, value]) => [key, deepPartial(value as z.ZodType).optional()]),
+  );
   return z.strictObject(shape);
 }
 

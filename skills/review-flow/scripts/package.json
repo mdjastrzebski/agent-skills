@@ -2,9 +2,6 @@
   "name": "review-flow-scripts",
   "private": true,
   "type": "module",
-  "engines": {
-    "node": ">=20"
-  },
   "scripts": {
     "build": "tsdown --config-loader unrun",
     "test": "vitest run",
@@ -17,5 +14,8 @@
     "unrun": "^0.3.1",
     "vitest": "^3.2.4",
     "zod": "^4.1.12"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

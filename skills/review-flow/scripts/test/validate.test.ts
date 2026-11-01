@@ -16,7 +16,9 @@ describe("validateValue error messages", () => {
     const result = validateValue("findings", [finding, { ...finding, id: "correctness-2", severity: "major", foo: 1 }]);
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.errors).toContain('[1].severity: expected one of "critical" | "high" | "medium" | "low", got "major"');
+    expect(result.errors).toContain(
+      '[1].severity: expected one of "critical" | "high" | "medium" | "low", got "major"',
+    );
     expect(result.errors).toContain('[1]: unknown key(s) "foo"');
   });
 
@@ -58,7 +60,11 @@ describe("dist/validate.mjs CLI", () => {
   const run = (...args: string[]) => spawnSync(process.execPath, [cli, ...args], { encoding: "utf8" });
 
   it("exits 0 for each valid kind", () => {
-    for (const [kind, value] of [["findings", [finding]], ["candidates", [candidate]], ["verdict", verdict]] as const) {
+    for (const [kind, value] of [
+      ["findings", [finding]],
+      ["candidates", [candidate]],
+      ["verdict", verdict],
+    ] as const) {
       const result = run(kind, write(`${kind}.json`, value));
       expect(result.status, result.stderr).toBe(0);
       expect(result.stdout).toMatch(/^ok: /);
@@ -82,10 +88,14 @@ describe("dist/validate.mjs CLI", () => {
     expect(source).not.toMatch(/from\s+["'](?!node:)[^"']+["']/);
     const isolated = mkdtempSync(join(tmpdir(), "review-flow-dist-"));
     writeFileSync(join(isolated, "validate.mjs"), source);
-    const output = execFileSync(process.execPath, [join(isolated, "validate.mjs"), "verdict", write("v.json", verdict)], {
-      cwd: isolated,
-      encoding: "utf8",
-    });
+    const output = execFileSync(
+      process.execPath,
+      [join(isolated, "validate.mjs"), "verdict", write("v.json", verdict)],
+      {
+        cwd: isolated,
+        encoding: "utf8",
+      },
+    );
     expect(output).toMatch(/^ok: /);
   });
 });

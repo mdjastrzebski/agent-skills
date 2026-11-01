@@ -23,18 +23,28 @@ describe("detectStack", () => {
   });
 
   it("detects RN, TS and the test runner", () => {
-    const stack = detectStack(project({ dependencies: { "react-native": "0.76" }, devDependencies: { vitest: "3" } }, ["tsconfig.json"]));
+    const stack = detectStack(
+      project({ dependencies: { "react-native": "0.76" }, devDependencies: { vitest: "3" } }, ["tsconfig.json"]),
+    );
     expect(stack).toMatchObject({ reactNative: true, typescript: true, hasTsc: false, testRunner: "vitest" });
   });
 });
 
 describe("detectChecks", () => {
   it("prefers a typecheck script, else tsc when available", () => {
-    expect(detectChecks(detectStack(project({ scripts: { typecheck: "tsc -b" }, devDependencies: { typescript: "5" } }, ["pnpm-lock.yaml"])))).toEqual({
+    expect(
+      detectChecks(
+        detectStack(
+          project({ scripts: { typecheck: "tsc -b" }, devDependencies: { typescript: "5" } }, ["pnpm-lock.yaml"]),
+        ),
+      ),
+    ).toEqual({
       typecheck: "pnpm typecheck",
       test: null,
     });
-    expect(detectChecks(detectStack(project({ devDependencies: { typescript: "5", jest: "29" } }, ["bun.lockb"])))).toEqual({
+    expect(
+      detectChecks(detectStack(project({ devDependencies: { typescript: "5", jest: "29" } }, ["bun.lockb"]))),
+    ).toEqual({
       typecheck: "bunx tsc --noEmit",
       test: "bunx jest --findRelatedTests",
     });
@@ -42,7 +52,9 @@ describe("detectChecks", () => {
 
   it("falls back to the test script, ignoring npm's placeholder", () => {
     expect(detectChecks(detectStack(project({ scripts: { test: "mocha" } }))).test).toBe("npm test");
-    expect(detectChecks(detectStack(project({ scripts: { test: 'echo "Error: no test specified" && exit 1' } }))).test).toBeNull();
+    expect(
+      detectChecks(detectStack(project({ scripts: { test: 'echo "Error: no test specified" && exit 1' } }))).test,
+    ).toBeNull();
     expect(detectChecks(null)).toEqual({ typecheck: null, test: null });
   });
 });

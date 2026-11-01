@@ -2,7 +2,7 @@
 
 Implements [SPEC.md](SPEC.md). Do one phase per session; each phase ends with its tests passing and a commit.
 
-Dev commands (run in `scripts/`): `npm install`, `npm run build` (bundles `dist/*.mjs` and regenerates `../schemas/*.json`), `npm test`, `npm run typecheck`.
+Dev commands (run in `scripts/`): `npm install`, `npm run build` (bundles `dist/*.mjs` and regenerates `../schemas/*.json`), `npm test`, `npm run typecheck`. Lint and format run from the repo root: `npm run lint` (oxlint), `npm run format` / `npm run format:check` (oxfmt).
 
 | Phase | Scope | Done when | Status |
 |---|---|---|---|

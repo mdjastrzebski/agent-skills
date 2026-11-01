@@ -47,14 +47,17 @@ export function userConfigPath(env: NodeJS.ProcessEnv = process.env): string {
 /** JSON.parse that also accepts // and /* *\/ comments and trailing commas. */
 export function parseJsonc(text: string): unknown {
   let out = "";
-  for (let i = 0; i < text.length; ) {
+  for (let i = 0; i < text.length;) {
     const c = text[i];
     if (c === '"') {
       const start = i++;
       while (i < text.length && text[i] !== '"') i += text[i] === "\\" ? 2 : 1;
       out += text.slice(start, ++i);
     } else if (c === "/" && text[i + 1] === "/") {
-      while (i < text.length && text[i] !== "\n") (out += " "), i++;
+      while (i < text.length && text[i] !== "\n") {
+        out += " ";
+        i++;
+      }
     } else if (c === "/" && text[i + 1] === "*") {
       const end = text.indexOf("*/", i + 2);
       const stop = end === -1 ? text.length : end + 2;
@@ -135,14 +138,19 @@ export function parseSet(arg: string): ConfigLayer {
   if (eq <= 0) throw new ConfigError([`--set ${arg}: expected key=value, e.g. --set models.claude.verifier=opus`]);
   const path = arg.slice(0, eq).split(".");
   const raw = arg.slice(eq + 1);
-  if (path.some((part) => part === "")) throw new ConfigError([`--set ${arg}: empty segment in key "${arg.slice(0, eq)}"`]);
+  if (path.some((part) => part === ""))
+    throw new ConfigError([`--set ${arg}: empty segment in key "${arg.slice(0, eq)}"`]);
 
   let value: unknown = raw;
   const node = schemaAt(ConfigFile, path);
   const type = node ? (unwrap(node) as any)._zod.def.type : undefined;
   if (raw === "null" && node?.safeParse(null).success) value = null;
   else if (type === "string" || type === "enum") value = raw;
-  else if (type === "array" && !raw.trimStart().startsWith("[")) value = raw.split(",").map((s) => s.trim()).filter(Boolean);
+  else if (type === "array" && !raw.trimStart().startsWith("["))
+    value = raw
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
   else {
     try {
       value = JSON.parse(raw);
@@ -163,7 +171,8 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 function merge(base: unknown, over: unknown): unknown {
   if (!isPlainObject(base) || !isPlainObject(over)) return structuredClone(over);
   const out: Record<string, unknown> = { ...base };
-  for (const [key, value] of Object.entries(over)) out[key] = key in out ? merge(out[key], value) : structuredClone(value);
+  for (const [key, value] of Object.entries(over))
+    out[key] = key in out ? merge(out[key], value) : structuredClone(value);
   return out;
 }
 
@@ -244,17 +253,24 @@ export function loadConfig(options: LoadOptions = {}): LoadedConfig {
 function schemaLeaves(schema: z.ZodType, prefix: string[] = []): string[][] {
   const inner = unwrap(schema) as any;
   if (inner._zod.def.type !== "object") return [prefix];
-  return Object.entries(inner._zod.def.shape).flatMap(([key, value]) => schemaLeaves(value as z.ZodType, [...prefix, key]));
+  return Object.entries(inner._zod.def.shape).flatMap(([key, value]) =>
+    schemaLeaves(value as z.ZodType, [...prefix, key]),
+  );
 }
 
 export function renderShow(loaded: LoadedConfig): string {
   const lines = ["files:"];
-  for (const file of loaded.files) lines.push(`  ${file.source.padEnd(8)} ${file.path}${file.found ? "" : " (not found)"}`);
+  for (const file of loaded.files)
+    lines.push(`  ${file.source.padEnd(8)} ${file.path}${file.found ? "" : " (not found)"}`);
   lines.push("values:");
   const rows = schemaLeaves(Config).map((path) => {
     const key = path.join(".");
     const value = path.reduce<any>((current, part) => current?.[part], loaded.config);
-    return { key, value: value === undefined ? "(auto-detect)" : JSON.stringify(value), source: loaded.sources[key] ?? "default" };
+    return {
+      key,
+      value: value === undefined ? "(auto-detect)" : JSON.stringify(value),
+      source: loaded.sources[key] ?? "default",
+    };
   });
   const width = Math.max(...rows.map((row) => row.key.length));
   for (const row of rows) lines.push(`  ${row.key.padEnd(width)} = ${row.value}  [${row.source}]`);
@@ -268,11 +284,18 @@ const EXAMPLES: Partial<Record<keyof Config, unknown>> = {
   base: "main",
   checks: { typecheck: "npm run typecheck", test: "npm test" },
   ignore: ["**/*.snap", "**/generated/**"],
-  lenses: { enabled: ["correctness", "security", "tests", "performance", "react-native"], custom: ["./.review-flow-lenses/accessibility.md"] },
+  lenses: {
+    enabled: ["correctness", "security", "tests", "performance", "react-native"],
+    custom: ["./.review-flow-lenses/accessibility.md"],
+  },
 };
 
 function isEmpty(value: unknown): boolean {
-  return value === undefined || (Array.isArray(value) && !value.length) || (isPlainObject(value) && !Object.keys(value).length);
+  return (
+    value === undefined ||
+    (Array.isArray(value) && !value.length) ||
+    (isPlainObject(value) && !Object.keys(value).length)
+  );
 }
 
 /** `$schema` reference: repo-relative when the skill lives inside the repo, else a file URL to the installed copy. */
@@ -307,7 +330,9 @@ function compactJson(value: unknown, indent = ""): string {
   if (indent.length + inline.length <= 100 || !(Array.isArray(value) || isPlainObject(value))) return inline;
   const next = `${indent}  `;
   if (Array.isArray(value)) return `[\n${value.map((item) => next + compactJson(item, next)).join(",\n")}\n${indent}]`;
-  const entries = Object.entries(value).map(([key, inner]) => `${next}${JSON.stringify(key)}: ${compactJson(inner, next)}`);
+  const entries = Object.entries(value).map(
+    ([key, inner]) => `${next}${JSON.stringify(key)}: ${compactJson(inner, next)}`,
+  );
   return `{\n${entries.join(",\n")}\n${indent}}`;
 }
 
@@ -317,13 +342,15 @@ export function renderInit(defaults: Config, detected: ConfigLayer, ref: string)
     return lines.map((line) => `  ${comment ? "// " : ""}${line}`);
   };
   const keys = Object.keys((Config as any)._zod.def.shape) as (keyof Config)[];
-  const active = keys.filter((key) => detected[key] !== undefined && JSON.stringify(detected[key]) !== JSON.stringify(defaults[key]));
+  const active = keys.filter(
+    (key) => detected[key] !== undefined && JSON.stringify(detected[key]) !== JSON.stringify(defaults[key]),
+  );
   const lines = [
     "{",
     "  // review-flow config, shared by the team. Commented keys show built-in defaults (or examples); uncomment to override.",
     "  // `node <skill>/scripts/dist/config.mjs show` prints the effective config and where each value comes from.",
   ];
-  for (const key of keys.filter((key) => !active.includes(key))) {
+  for (const key of keys.filter((k) => !active.includes(k))) {
     const value = isEmpty(defaults[key]) ? (EXAMPLES[key] ?? defaults[key]) : defaults[key];
     lines.push(...block(key, value, true, true));
   }
@@ -357,13 +384,17 @@ function parseArgs(argv: string[]): Args {
 
 function repoRootFrom(dir: string): string | null {
   try {
-    return execFileSync("git", ["-C", dir, "rev-parse", "--show-toplevel"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    return execFileSync("git", ["-C", dir, "rev-parse", "--show-toplevel"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
   } catch {
     return null;
   }
 }
 
-const USAGE = "usage: config.mjs show [--json] [--set key=value]... [--repo <dir>]\n       config.mjs init [--force] [--repo <dir>]";
+const USAGE =
+  "usage: config.mjs show [--json] [--set key=value]... [--repo <dir>]\n       config.mjs init [--force] [--repo <dir>]";
 
 export function main(argv: string[]): number {
   const args = parseArgs(argv);

@@ -8,7 +8,7 @@ const LineNumber = z.number().int().min(1);
 
 const findingFields = {
   id: z.string().min(1),
-  lens: z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, "lens must be kebab-case, e.g. \"react-native\""),
+  lens: z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'lens must be kebab-case, e.g. "react-native"'),
   file: z.string().min(1),
   line_start: LineNumber,
   line_end: LineNumber,
@@ -32,14 +32,12 @@ function checkLineRange(value: LineRange, ctx: z.RefinementCtx) {
   }
 }
 
-export const Finding = z
-  .strictObject(findingFields)
-  .superRefine((value, ctx) => {
-    checkLineRange(value, ctx);
-    if (!new RegExp(`^${value.lens}-\\d+$`).test(value.id)) {
-      ctx.addIssue({ code: "custom", path: ["id"], message: `id must be "<lens>-<n>", e.g. "${value.lens}-1"` });
-    }
-  });
+export const Finding = z.strictObject(findingFields).superRefine((value, ctx) => {
+  checkLineRange(value, ctx);
+  if (!new RegExp(`^${value.lens}-\\d+$`).test(value.id)) {
+    ctx.addIssue({ code: "custom", path: ["id"], message: `id must be "<lens>-<n>", e.g. "${value.lens}-1"` });
+  }
+});
 
 export const Candidate = z
   .strictObject({ ...findingFields, source_ids: z.array(z.string().min(1)).min(1) })
@@ -64,7 +62,12 @@ function uniqueIds<T extends { id: string }>(items: T[], ctx: z.RefinementCtx) {
   items.forEach((item, index) => {
     const first = seen.get(item.id);
     if (first === undefined) seen.set(item.id, index);
-    else ctx.addIssue({ code: "custom", path: [index, "id"], message: `duplicate id "${item.id}" (first used at [${first}])` });
+    else
+      ctx.addIssue({
+        code: "custom",
+        path: [index, "id"],
+        message: `duplicate id "${item.id}" (first used at [${first}])`,
+      });
   });
 }
 

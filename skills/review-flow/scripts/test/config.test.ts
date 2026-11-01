@@ -32,7 +32,8 @@ function gitRepo(): string {
 function setup(files: { user?: unknown; repo?: unknown } = {}) {
   const repoRoot = tempDir("cfg");
   const userPath = join(tempDir("home"), "config.json");
-  const write = (path: string, value: unknown) => writeFileSync(path, typeof value === "string" ? value : JSON.stringify(value));
+  const write = (path: string, value: unknown) =>
+    writeFileSync(path, typeof value === "string" ? value : JSON.stringify(value));
   if (files.user !== undefined) write(userPath, files.user);
   if (files.repo !== undefined) write(join(repoRoot, "review-flow.config.json"), files.repo);
   return { repoRoot, userConfigPath: userPath };
@@ -68,7 +69,11 @@ describe("defaults.json", () => {
 
   it("matches the §8 scoring weights", () => {
     expect(defaults.scoring.severity).toEqual({ critical: 10, high: 6, medium: 3, low: 1 });
-    expect(defaults.scoring.confidence).toEqual({ confirmed: { executed: 1, traced: 0.85, reasoned: 0.65 }, uncertain: 0.35, refuted: 0 });
+    expect(defaults.scoring.confidence).toEqual({
+      confirmed: { executed: 1, traced: 0.85, reasoned: 0.65 },
+      uncertain: 0.35,
+      refuted: 0,
+    });
     expect(defaults.scoring.impact).toEqual({ "user-facing": 1.2, "developer-facing": 1, internal: 0.9 });
     expect(defaults.scoring.fixBeforeMergeThreshold).toBe(5);
   });
@@ -79,7 +84,11 @@ describe("loadConfig precedence", () => {
     const loaded = loadConfig(setup());
     expect(loaded.config).toEqual(loadDefaults());
     expect(new Set(Object.values(loaded.sources))).toEqual(new Set(["default"]));
-    expect(loaded.files.map((f) => [f.source, f.found])).toEqual([["default", true], ["user", false], ["repo", false]]);
+    expect(loaded.files.map((f) => [f.source, f.found])).toEqual([
+      ["default", true],
+      ["user", false],
+      ["repo", false],
+    ]);
   });
 
   it("applies default < user < repo < override, tracking the source of each value", () => {
@@ -117,8 +126,8 @@ describe("loadConfig precedence", () => {
   });
 
   it("skips the repo layer when no repo root is given", () => {
-    const { userConfigPath } = setup();
-    expect(loadConfig({ userConfigPath }).files.map((f) => f.source)).toEqual(["default", "user"]);
+    const { userConfigPath: path } = setup();
+    expect(loadConfig({ userConfigPath: path }).files.map((f) => f.source)).toEqual(["default", "user"]);
   });
 });
 
@@ -138,7 +147,9 @@ describe("config errors", () => {
 
   it("reports invalid values and unparseable files", () => {
     const errors = errorsOf(() => loadConfig(setup({ user: { rigor: "extreme" }, repo: "{ nope" })));
-    expect(errors.some((e) => e.includes('rigor: expected one of "low" | "medium" | "high", got "extreme"'))).toBe(true);
+    expect(errors.some((e) => e.includes('rigor: expected one of "low" | "medium" | "high", got "extreme"'))).toBe(
+      true,
+    );
     expect(errors.some((e) => /review-flow\.config\.json: cannot parse:/.test(e))).toBe(true);
   });
 
@@ -153,7 +164,9 @@ describe("config errors", () => {
       '--set rigr=high: rigr: unknown key (did you mean "rigor"?)',
     ]);
     expect(errorsOf(() => loadConfig({ ...options, sets: ["rigor"] }))[0]).toMatch(/expected key=value/);
-    expect(errorsOf(() => loadConfig({ ...options, sets: ["rigorPresets.high.maxVerified=lots"] }))[0]).toMatch(/expected number/);
+    expect(errorsOf(() => loadConfig({ ...options, sets: ["rigorPresets.high.maxVerified=lots"] }))[0]).toMatch(
+      /expected number/,
+    );
   });
 });
 
@@ -174,7 +187,11 @@ describe("parseSet", () => {
 
 describe("parseJsonc", () => {
   it("keeps comment-like text and commas inside strings", () => {
-    expect(parseJsonc('{ "a": "http://x // y", "b": "/* z */", "c": "1,}" }')).toEqual({ a: "http://x // y", b: "/* z */", c: "1,}" });
+    expect(parseJsonc('{ "a": "http://x // y", "b": "/* z */", "c": "1,}" }')).toEqual({
+      a: "http://x // y",
+      b: "/* z */",
+      c: "1,}",
+    });
   });
 
   it("drops trailing commas, including before comments", () => {
@@ -199,7 +216,11 @@ describe("userConfigPath", () => {
 
 describe("init", () => {
   it("activates only detected values that differ from defaults; the rest is commented out", () => {
-    const text = renderInit(loadDefaults(), { base: "develop", checks: { test: "yarn jest" }, rigor: "medium" }, "./s.json");
+    const text = renderInit(
+      loadDefaults(),
+      { base: "develop", checks: { test: "yarn jest" }, rigor: "medium" },
+      "./s.json",
+    );
     const parsed = parseJsonc(text);
     expect(parsed).toEqual({ base: "develop", checks: { test: "yarn jest" }, $schema: "./s.json" });
     expect(text).toContain('  // "rigor": "medium",');
@@ -222,7 +243,10 @@ describe("init", () => {
 
   it("detects base, checks and RN ignores from the repo", () => {
     const repo = gitRepo();
-    writeFileSync(join(repo, "package.json"), JSON.stringify({ dependencies: { "react-native": "0.76" }, devDependencies: { typescript: "5", jest: "29" } }));
+    writeFileSync(
+      join(repo, "package.json"),
+      JSON.stringify({ dependencies: { "react-native": "0.76" }, devDependencies: { typescript: "5", jest: "29" } }),
+    );
     writeFileSync(join(repo, "yarn.lock"), "");
     expect(detectLayer(repo)).toEqual({
       base: "main",
@@ -232,8 +256,12 @@ describe("init", () => {
   });
 
   it("points $schema inside the repo relatively, otherwise at the installed file", () => {
-    expect(schemaRef("/repo/.claude/skills/review-flow", "/repo")).toBe("./.claude/skills/review-flow/schemas/config.schema.json");
-    expect(schemaRef("/home/u/.claude/skills/review-flow", "/repo")).toBe("file:///home/u/.claude/skills/review-flow/schemas/config.schema.json");
+    expect(schemaRef("/repo/.claude/skills/review-flow", "/repo")).toBe(
+      "./.claude/skills/review-flow/schemas/config.schema.json",
+    );
+    expect(schemaRef("/home/u/.claude/skills/review-flow", "/repo")).toBe(
+      "file:///home/u/.claude/skills/review-flow/schemas/config.schema.json",
+    );
   });
 });
 
@@ -241,7 +269,11 @@ describe("dist/config.mjs CLI", () => {
   const cli = join(skillDir(), "scripts/dist/config.mjs");
   const home = tempDir("xdg");
   const run = (cwd: string, ...args: string[]) =>
-    spawnSync(process.execPath, [cli, ...args], { cwd, encoding: "utf8", env: { ...process.env, XDG_CONFIG_HOME: home } });
+    spawnSync(process.execPath, [cli, ...args], {
+      cwd,
+      encoding: "utf8",
+      env: { ...process.env, XDG_CONFIG_HOME: home },
+    });
 
   it("show prints values with their sources", () => {
     const repo = gitRepo();
@@ -273,11 +305,17 @@ describe("dist/config.mjs CLI", () => {
 
   it("init writes a loadable file and refuses to overwrite without --force", () => {
     const repo = gitRepo();
-    writeFileSync(join(repo, "package.json"), JSON.stringify({ scripts: { typecheck: "tsc" }, devDependencies: { vitest: "3" } }));
+    writeFileSync(
+      join(repo, "package.json"),
+      JSON.stringify({ scripts: { typecheck: "tsc" }, devDependencies: { vitest: "3" } }),
+    );
     const first = run(repo, "init");
     expect(first.status, first.stderr).toBe(0);
     const text = readFileSync(join(repo, "review-flow.config.json"), "utf8");
-    expect(parseJsonc(text)).toMatchObject({ base: "main", checks: { typecheck: "npm run typecheck", test: "npx vitest related --run" } });
+    expect(parseJsonc(text)).toMatchObject({
+      base: "main",
+      checks: { typecheck: "npm run typecheck", test: "npx vitest related --run" },
+    });
     expect(loadConfig({ repoRoot: repo, userConfigPath: join(home, "none.json") }).sources.base).toBe("repo");
 
     expect(run(repo, "init").status).toBe(1);
