@@ -48,3 +48,20 @@ Found by dogfooding, outside the report:
 - **Miss (caught by running it):** `prepare --base HEAD~1` reviewed against `origin/HEAD~1` (57 files instead of 14). `resolveBaseRef` tried `refs/remotes/origin/<base>` with `rev-parse --verify`, which also resolves revision expressions. Fixed with `show-ref --verify`, plus a regression test that fails without the fix. Bug from step 3; no reviewer had flagged it. Eval fixture idea: "ref-name lookup that accepts revision syntax".
 
 Verifier observations: verdicts were well-argued, with file:line traces. Verifiers used read-only git commands (`git show`, `git status`) for context, which verifier.md allows. Total: 5 reviewers + 7 verifiers, about 30 s each.
+
+## Step 5: dedup + scoring + rigor (2026-11-01)
+
+Run: `current --base HEAD~1` (the step-5 commit, 18 files), rigor medium, Claude Code, reviewers on sonnet, verifiers on opus. Lenses: correctness 1, security 0, tests 2, performance 0, spec 2. Dedup: 5 candidates from 5 findings, no clusters, no possible duplicates. Scored: 0 fix before merge, 0 needs judgment, 4 follow-up (all low, confirmed/traced, score 0.85), 1 dismissed. No missing or invalid verdicts. First run with real scoring; buckets and score lines read well.
+
+Fixed (confirmed follow-ups):
+- c-2 (spec-2): SPEC §8 still said "one exported constant"; reworded to the `scoring` config section snapshotted into `context.json`.
+- c-3 (tests-2): `compareRanked`'s last tiebreak (line within a file, reviewer severity masked) was untested. Added a test; a mutation check (dropping the mask) makes it fail.
+- c-4 (tests-1): `readRanked`'s shape guard (wrong `version`, non-array `items`) was untested. Added both cases.
+- c-5 (spec-1): SPEC ticked step 5 while PROGRESS said the dogfood run was pending. This run closes it; the checkbox now says "; dogfood run" like step 4's.
+
+Dismissed by verifier (correct):
+- c-1 (correctness-1): "`--lenses correctness` at high rigor silently adds correctness-alt". Deliberate and tested. Note the verifier partly justified it with PROGRESS.md, i.e. the implementer's own notes, not SPEC; SPEC §4 only says high rigor adds a second correctness pass. Fine here, but verifiers treating implementation notes as the spec is worth watching.
+
+Observations:
+- Nothing clustered, so this run didn't exercise dedup merging on real data; with high rigor (correctness-alt) it should. Try a high-rigor dogfood run in step 6.
+- The scoring threshold (5) means low/medium confirmed findings can never be "fix before merge" unless user-facing and executed (medium × 1.0 × 1.2 = 3.6). Expected per §8, but revisit in step 11 tuning.

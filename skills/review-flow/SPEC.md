@@ -257,7 +257,7 @@ Verdict = {
   - score ≥ 5 → Fix before merge
   - else → Follow-up
 - Ties are broken by effort (cheaper first), then by file path.
-- Keep the weights in one exported constant so they're easy to tune.
+- Keep the weights in one place so they're easy to tune: the `scoring` section of `defaults.json`, overridable per §4a. `prepare` copies the effective weights into `context.json`, so re-scoring a run is reproducible.
 
 ## 9. Harness specifics
 
@@ -317,7 +317,7 @@ Each step must be usable on its own. Prefer simple stubs over half-built feature
 - [x] Step 2: Review stage (subagents per lens, findings + validation)
 - [x] Step 3: Walking skeleton (report.mjs + SKILL.md wiring; first dogfood run)
 - [x] Step 4: Verification (read-only verifiers, placeholder ranking; dogfood run)
-- [x] Step 5: Dedup + scoring + rigor (deterministic dedup, score.mjs, second correctness pass)
+- [x] Step 5: Dedup + scoring + rigor (deterministic dedup, score.mjs, second correctness pass; dogfood run)
 
 ### Next steps
 

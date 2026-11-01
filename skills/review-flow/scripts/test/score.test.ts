@@ -55,9 +55,16 @@ describe("bucketOf", () => {
 });
 
 describe("compareRanked", () => {
-  const item = (id: string, bucket: Ranked["bucket"], value: number, extra: Partial<Verdict> = {}, file = "a.ts") =>
+  const item = (
+    id: string,
+    bucket: Ranked["bucket"],
+    value: number,
+    extra: Partial<Verdict> = {},
+    file = "a.ts",
+    at: Partial<Candidate> = {},
+  ) =>
     ({
-      candidate: { ...(candidate as Candidate), id, file },
+      candidate: { ...(candidate as Candidate), id, file, ...at },
       verdict: v(extra),
       bucket,
       score: value,
@@ -81,6 +88,12 @@ describe("compareRanked", () => {
       "c-6",
       "c-1",
     ]);
+  });
+
+  it("breaks the last ties by line within a file, ignoring the reviewer's severity", () => {
+    const late = item("c-1", "fix", 5, {}, "a.ts", { severity: "critical", line_start: 30, line_end: 30 });
+    const early = item("c-2", "fix", 5, {}, "a.ts", { severity: "low", line_start: 10, line_end: 10 });
+    expect([late, early].toSorted(compareRanked).map((i) => i.candidate.id)).toEqual(["c-2", "c-1"]);
   });
 });
 
@@ -144,6 +157,13 @@ describe("score", () => {
     expect(() => readRanked(dir, candidates)).toThrow(/run score\.mjs first/);
     writeFileSync(join(dir, "ranked.json"), "{ broken");
     expect(() => readRanked(dir, candidates)).toThrow(/ranked\.json is invalid/);
+    for (const shape of [
+      { version: 2, items: [], problems: [] },
+      { version: 1, items: {}, problems: [] },
+    ]) {
+      writeFileSync(join(dir, "ranked.json"), JSON.stringify(shape));
+      expect(() => readRanked(dir, candidates)).toThrow(/is invalid: re-run score\.mjs/);
+    }
     score(dir);
     expect(readRanked(dir, candidates).problems).toHaveLength(3);
     expect(() => readRanked(dir, candidates.slice(1))).toThrow(/does not match candidates\.json/);

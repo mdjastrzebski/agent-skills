@@ -13,7 +13,7 @@ Before §14 existed, work followed a different phase plan. Its phases 1–2 (sch
 | 2 | Review stage: reviewer + lens prompts, subagent per lens, validation | ✅ done (built in step 3) |
 | 3 | Walking skeleton: minimal `report.mjs`, SKILL.md wiring 1 → 2 → report, first dogfood run | ✅ done |
 | 4 | Verification (read-only verifiers, verdicts, placeholder ranking) | ✅ done |
-| 5 | Dedup + scoring + rigor, vitest for dedup/scoring/rendering | ✅ done (dogfood run pending) |
+| 5 | Dedup + scoring + rigor, vitest for dedup/scoring/rendering | ✅ done |
 | 6 | Executed verification (`scratch.mjs` worktrees) | ⬜ |
 | 7 | Config + models per role applied to subagents | ⬜ (config itself done in foundations) |
 | 8 | Branch and PR modes | ⬜ |
@@ -80,4 +80,4 @@ Before §14 existed, work followed a different phase plan. Its phases 1–2 (sch
 - **`report.mjs`** now requires `ranked.json` ("run score.mjs first") and refuses one whose candidates differ from `candidates.json` (dedup ran again since scoring). Buckets in order Fix before merge, Needs human judgment, Follow-up, Dismissed (collapsed; it now also holds uncertain-low items, so the verifier label shows the real verdict). Each item gets a score breakdown line and an `Action:` line per bucket. Summary: bucket counts, problems, then non-dismissed items tagged `[bucket, severity, score]`. `readCandidates` moved to `findings.ts`. Still no `report.json` (step 9 needs it for the publish record).
 - **Rigor:** the §4 table was already applied by prepare (lenses, `maxVerified`, `parallel`, `allowExecution`) except the second correctness pass. It is the lens `correctness-alt` (`prompts/lenses/correctness-alt.md`: callers → inputs → exits → removed code, instead of hunk by hunk), inserted right after `correctness` when `secondCorrectnessPass` is on and `correctness` is in the final list (also with `--lenses correctness`). It is not a config lens name (`lenses.enabled` can't name it), but `--lenses correctness-alt` is accepted. Its findings usually cluster with correctness's in dedup, which is the point.
 - Tests: `test/score.test.ts` (weights, buckets, threshold edge, ordering, ranked.json determinism and staleness, CLI), `test/dedup.test.ts` rewritten for clustering and possible duplicates, `test/report.test.ts` for the new buckets, actions, score lines and merged sources, and a prepare test for high rigor.
-- Not done in this session: the dogfood run on the step-5 diff (the user asked to stop once tests pass). Run it next, log it in dogfood-log.md.
+- Dogfood run done after the step-5 commit (see dogfood-log.md): 4 low follow-ups fixed (SPEC §8 wording, SPEC status, tests for the `compareRanked` line tiebreak and the `readRanked` shape guard), 1 correctly dismissed.
