@@ -1,65 +1,93 @@
 /**
- * Report (walking skeleton): turns `findings/*.json` into `report.md`, grouped by severity, then file.
- * Findings are unverified at this stage; verification, scoring and buckets come later.
+ * Report: turns verified candidates into `report.md`, bucketed by verdict.
+ * Ranking is a placeholder until scoring (step 5): Confirmed, then Needs judgment (uncertain), then Dismissed
+ * (refuted); within a bucket by reassessed severity, evidence strength, file and line.
  *
  * Usage: node scripts/dist/report.mjs <runDir>
  *
+ * Needs `candidates.json` (from dedup.mjs) and reads `verdicts/<id>.json` for each candidate. Candidates whose
+ * verdict is missing or invalid, and findings over the verification limit, are listed but never ranked.
  * Prints a short summary (counts and top items), then the report path as the last line of stdout.
  * Output depends only on the run directory's files, so re-runs are byte-identical.
- * Exit 0 on success (also when some findings files are invalid; the report lists them), 2 on usage errors.
+ * Exit 0 on success (also when some findings or verdicts are invalid; the report lists them), 2 on usage errors
+ * or an incomplete run directory.
  */
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { isEntry } from "./cli.js";
 import { type Context, readContext } from "./context.js";
+import { type Collected, collectFindings, compareFindings, SEVERITY_RANK } from "./findings.js";
 import { appendTrace, resolveRunDir, RunDirError } from "./run-dir.js";
-import { type Finding, SEVERITIES } from "./schemas.js";
+import type { Candidate, Finding, Verdict } from "./schemas.js";
 import { validateText } from "./validation.js";
 
-export type LensOutcome = {
-  lens: string;
-  file: string;
-  status: "ok" | "missing" | "invalid";
-  count: number;
-  errors: string[];
+export type Verified = { candidate: Candidate; verdict: Verdict };
+export type VerdictProblem = { candidate: Candidate; status: "missing" | "invalid"; errors: string[] };
+
+export type Buckets = {
+  confirmed: Verified[];
+  judgment: Verified[];
+  dismissed: Verified[];
+  problems: VerdictProblem[];
+  /** Valid findings no candidate covers: over the verification limit. */
+  unverified: Finding[];
 };
 
-export type Collected = { findings: Finding[]; outcomes: LensOutcome[] };
+export type ReportInput = Collected & { candidates: Candidate[]; buckets: Buckets };
 
-const SEVERITY_RANK = Object.fromEntries(SEVERITIES.map((severity, index) => [severity, index]));
+const EVIDENCE_RANK = { executed: 0, traced: 1, reasoned: 2 } as const;
 
-function compareFindings(a: Finding, b: Finding): number {
+function compareVerified(a: Verified, b: Verified): number {
   return (
-    SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] ||
-    a.file.localeCompare(b.file) ||
-    a.line_start - b.line_start ||
-    a.id.localeCompare(b.id, undefined, { numeric: true })
+    SEVERITY_RANK[a.verdict.severity_reassessed] - SEVERITY_RANK[b.verdict.severity_reassessed] ||
+    EVIDENCE_RANK[a.verdict.evidence_type] - EVIDENCE_RANK[b.verdict.evidence_type] ||
+    compareFindings(a.candidate, b.candidate)
   );
 }
 
-/** Reads every expected lens output plus any extra `findings/*.json`, validating each file. */
-export function collectFindings(runDir: string, context: Context): Collected {
-  const expected = context.lenses.map((lens) => ({ lens: lens.name, file: lens.output }));
-  const dir = join(runDir, "findings");
-  const extra = existsSync(dir)
-    ? readdirSync(dir)
-        .filter((name) => name.endsWith(".json"))
-        .map((name) => `findings/${name}`)
-        .filter((file) => !expected.some((entry) => entry.file === file))
-        .toSorted()
-        .map((file) => ({ lens: file.slice("findings/".length, -".json".length), file }))
-    : [];
-  const findings: Finding[] = [];
-  const outcomes = [...expected, ...extra].map(({ lens, file }): LensOutcome => {
-    const path = join(runDir, file);
-    if (!existsSync(path)) return { lens, file, status: "missing", count: 0, errors: [] };
-    const result = validateText("findings", readFileSync(path, "utf8"));
-    if (!result.ok) return { lens, file, status: "invalid", count: 0, errors: result.errors };
-    const items = result.data as Finding[];
-    findings.push(...items);
-    return { lens, file, status: "ok", count: items.length, errors: [] };
-  });
-  return { findings: findings.toSorted(compareFindings), outcomes };
+export function readCandidates(runDir: string): Candidate[] {
+  const path = join(runDir, "candidates.json");
+  if (!existsSync(path)) throw new RunDirError(`${path} not found: run dedup.mjs first`);
+  const result = validateText("candidates", readFileSync(path, "utf8"));
+  if (!result.ok) throw new RunDirError(`${path} is invalid: ${result.errors.slice(0, 3).join("; ")}`);
+  return result.data as Candidate[];
+}
+
+/** Reads `verdicts/<id>.json` for each candidate and sorts the results into placeholder buckets. */
+export function bucketVerdicts(runDir: string, candidates: Candidate[], findings: Finding[]): Buckets {
+  const verified: Verified[] = [];
+  const problems: VerdictProblem[] = [];
+  for (const candidate of candidates) {
+    const path = join(runDir, "verdicts", `${candidate.id}.json`);
+    if (!existsSync(path)) {
+      problems.push({ candidate, status: "missing", errors: [] });
+      continue;
+    }
+    const result = validateText("verdict", readFileSync(path, "utf8"));
+    if (!result.ok) {
+      problems.push({ candidate, status: "invalid", errors: result.errors });
+      continue;
+    }
+    const verdict = result.data as Verdict;
+    if (verdict.candidate_id !== candidate.id) {
+      problems.push({
+        candidate,
+        status: "invalid",
+        errors: [`candidate_id: expected "${candidate.id}", got "${verdict.candidate_id}"`],
+      });
+      continue;
+    }
+    verified.push({ candidate, verdict });
+  }
+  const sorted = verified.toSorted(compareVerified);
+  const covered = new Set(candidates.flatMap((c) => c.source_ids));
+  return {
+    confirmed: sorted.filter((v) => v.verdict.verdict === "confirmed"),
+    judgment: sorted.filter((v) => v.verdict.verdict === "uncertain"),
+    dismissed: sorted.filter((v) => v.verdict.verdict === "refuted"),
+    problems,
+    unverified: findings.filter((f) => !covered.has(f.id)),
+  };
 }
 
 /** A code fence longer than any backtick run inside `text`. */
@@ -68,7 +96,7 @@ function fence(text: string): string {
   return "`".repeat(longest + 1);
 }
 
-function location(finding: Finding): string {
+function location(finding: Finding | Candidate): string {
   const lines =
     finding.line_start === finding.line_end ? `${finding.line_start}` : `${finding.line_start}-${finding.line_end}`;
   return `${finding.file}:${lines}`;
@@ -82,66 +110,90 @@ function quote(text: string): string {
     .join("\n");
 }
 
-function renderFinding(finding: Finding): string[] {
+function severityLabel({ candidate, verdict }: Verified): string {
+  return verdict.severity_reassessed === candidate.severity
+    ? verdict.severity_reassessed
+    : `${verdict.severity_reassessed} (reviewer: ${candidate.severity})`;
+}
+
+function renderItem(item: Verified): string[] {
+  const { candidate, verdict } = item;
   const lines = [
-    `#### ${finding.title}`,
+    `### ${candidate.title}`,
     "",
-    `\`${location(finding)}\` · ${finding.category} · ${finding.id}`,
+    `\`${location(candidate)}\` · ${severityLabel(item)} · ${candidate.category} · ${verdict.impact} · effort: ${verdict.effort} · ${candidate.id} (${candidate.source_ids.join(", ")})`,
     "",
-    finding.claim.trim(),
+    candidate.claim.trim(),
     "",
-    "**Evidence**",
+    `**Verifier** (${verdict.verdict}, ${verdict.evidence_type})`,
     "",
-    quote(finding.evidence),
+    quote(verdict.evidence),
     "",
   ];
-  if (finding.suggested_fix) {
-    const fix = finding.suggested_fix.trim();
+  const assessment = `${verdict.fix_assessment.status}${verdict.fix_assessment.notes.trim() ? `: ${verdict.fix_assessment.notes.trim()}` : ""}`;
+  if (candidate.suggested_fix) {
+    const fix = candidate.suggested_fix.trim();
     const isDiff = /^(diff --git|--- |@@ )/m.test(fix);
     const marks = fence(fix);
     lines.push(
-      "<details><summary>Suggested fix</summary>",
+      `<details><summary>Suggested fix (assessment: ${verdict.fix_assessment.status})</summary>`,
       "",
       `${marks}${isDiff ? "diff" : ""}`,
       fix,
       marks,
       "",
+      `Assessment: ${assessment}`,
+      "",
       "</details>",
       "",
     );
+  } else if (verdict.fix_assessment.notes.trim()) {
+    lines.push(`Fix: ${assessment}`, "");
   }
   return lines;
 }
 
-export function renderReport(context: Context, collected: Collected): string {
-  const { findings, outcomes } = collected;
+function html(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function renderDismissed({ candidate, verdict }: Verified): string[] {
+  return [
+    `<details><summary><b>${html(candidate.title)}</b> · <code>${html(location(candidate))}</code> · ${candidate.id} (${candidate.source_ids.join(", ")})</summary>`,
+    "",
+    candidate.claim.trim(),
+    "",
+    `**Verifier** (refuted, ${verdict.evidence_type})`,
+    "",
+    quote(verdict.evidence),
+    "",
+    "</details>",
+    "",
+  ];
+}
+
+export function renderReport(context: Context, input: ReportInput): string {
+  const { findings, outcomes, candidates, buckets } = input;
   const t = context.target;
-  const counts = SEVERITIES.map(
-    (severity) => [severity, findings.filter((f) => f.severity === severity).length] as const,
-  );
   const lines = [
     `# Review: ${t.branch ?? "detached HEAD"} (current)`,
     "",
-    "> ⚠️ Findings are **unverified** reviewer output. Independent verification is not implemented yet.",
+    "> Each candidate was checked by an independent, read-only verifier (traced or reasoned evidence; nothing was executed). Ranking is provisional until scoring lands.",
     "",
     `- **Target:** current · branch \`${t.branch ?? "(detached)"}\` · HEAD \`${t.head_sha.slice(0, 12)}\`${t.dirty ? " · dirty (uncommitted changes included)" : ""}`,
     `- **Base:** \`${t.base_ref}\` (merge-base \`${t.merge_base.slice(0, 12)}\`)`,
     `- **Rigor:** ${context.rigor} · **Harness:** ${context.harness} · **Files changed:** ${context.files.length}`,
     `- **Lenses:** ${outcomes.map((o) => `${o.lens} (${o.status === "ok" ? o.count : o.status})`).join(", ")}`,
-    `- **Findings:** ${findings.length}${
-      findings.length
-        ? ` (${counts
-            .filter(([, n]) => n)
-            .map(([s, n]) => `${n} ${s}`)
-            .join(", ")})`
-        : ""
-    }`,
+    `- **Verified:** ${candidates.length} of ${findings.length} finding(s) (limit ${context.limits.maxVerified})`,
+    `- **Results:** ${buckets.confirmed.length} confirmed · ${buckets.judgment.length} need judgment · ${buckets.dismissed.length} dismissed${
+      buckets.problems.length ? ` · ${buckets.problems.length} verification failed` : ""
+    }${buckets.unverified.length ? ` · ${buckets.unverified.length} not verified (over limit)` : ""}`,
     "",
   ];
-  const problems = outcomes.filter((o) => o.status !== "ok");
-  if (problems.length) {
+  const reviewerProblems = outcomes.filter((o) => o.status !== "ok");
+  if (reviewerProblems.length) {
     lines.push("## Reviewer problems", "");
-    for (const o of problems) {
+    for (const o of reviewerProblems) {
       lines.push(
         `- \`${o.file}\`: ${o.status === "missing" ? "not written (reviewer failed or did not finish)" : "invalid, skipped"}`,
       );
@@ -150,31 +202,59 @@ export function renderReport(context: Context, collected: Collected): string {
     }
     lines.push("");
   }
-  if (!findings.length) lines.push("No findings.", "");
-  for (const [severity, count] of counts) {
-    if (!count) continue;
-    lines.push(`## ${severity[0].toUpperCase()}${severity.slice(1)} (${count})`, "");
-    let file: string | undefined;
-    for (const finding of findings.filter((f) => f.severity === severity)) {
-      if (finding.file !== file) {
-        file = finding.file;
-        lines.push(`### \`${file}\``, "");
-      }
-      lines.push(...renderFinding(finding));
+  if (buckets.problems.length) {
+    lines.push("## Verification problems", "", "These candidates have no usable verdict and are not ranked.", "");
+    for (const p of buckets.problems) {
+      lines.push(
+        `- \`verdicts/${p.candidate.id}.json\`: ${p.status === "missing" ? "not written" : "invalid"} · [${p.candidate.severity}] ${p.candidate.title} (\`${location(p.candidate)}\`)`,
+      );
+      for (const error of p.errors.slice(0, 5)) lines.push(`  - ${error}`);
+      if (p.errors.length > 5) lines.push(`  - …and ${p.errors.length - 5} more`);
     }
+    lines.push("");
+  }
+  if (!candidates.length) lines.push("No findings.", "");
+  const sections = [
+    ["Confirmed", buckets.confirmed, renderItem],
+    ["Needs judgment", buckets.judgment, renderItem],
+    ["Dismissed", buckets.dismissed, renderDismissed],
+  ] as const;
+  for (const [title, items, render] of sections) {
+    if (!items.length) continue;
+    lines.push(`## ${title} (${items.length})`, "");
+    for (const item of items) lines.push(...render(item));
+  }
+  if (buckets.unverified.length) {
+    lines.push(
+      `## Not verified (${buckets.unverified.length})`,
+      "",
+      "Over the verification limit; unchecked reviewer output.",
+      "",
+    );
+    for (const f of buckets.unverified) lines.push(`- [${f.severity}] ${f.title} (\`${location(f)}\`) · ${f.id}`);
+    lines.push("");
   }
   return `${lines.join("\n").trimEnd()}\n`;
 }
 
 /** The chat summary the agent relays: at most 10 lines. */
-export function renderSummary(context: Context, collected: Collected, reportPath: string): string {
-  const { findings, outcomes } = collected;
-  const counts = SEVERITIES.map((s) => `${findings.filter((f) => f.severity === s).length} ${s}`).join(" · ");
-  const lines = [`${findings.length} unverified finding(s): ${counts}`];
-  const problems = outcomes.filter((o) => o.status !== "ok");
-  if (problems.length) lines.push(`reviewer problems: ${problems.map((o) => `${o.lens} ${o.status}`).join(", ")}`);
-  for (const finding of findings.slice(0, 10 - lines.length - 1))
-    lines.push(`- [${finding.severity}] ${finding.title} (${location(finding)})`);
+export function renderSummary(input: ReportInput, reportPath: string): string {
+  const { outcomes, buckets } = input;
+  const lines = [
+    `${buckets.confirmed.length} confirmed · ${buckets.judgment.length} need judgment · ${buckets.dismissed.length} dismissed`,
+  ];
+  const problems = [
+    ...outcomes.filter((o) => o.status !== "ok").map((o) => `reviewer ${o.lens} ${o.status}`),
+    ...buckets.problems.map((p) => `verdict ${p.candidate.id} ${p.status}`),
+  ];
+  if (buckets.unverified.length) problems.push(`${buckets.unverified.length} finding(s) over the verification limit`);
+  if (problems.length) lines.push(`problems: ${problems.join(", ")}`);
+  const top = [
+    ...buckets.confirmed.map((v) => ({ v, tag: v.verdict.severity_reassessed })),
+    ...buckets.judgment.map((v) => ({ v, tag: `${v.verdict.severity_reassessed}, needs judgment` })),
+  ];
+  for (const { v, tag } of top.slice(0, 10 - lines.length - 1))
+    lines.push(`- [${tag}] ${v.candidate.title} (${location(v.candidate)})`);
   lines.push(reportPath);
   return lines.join("\n");
 }
@@ -189,16 +269,21 @@ export function report(runDirArg: string): { reportPath: string; summary: string
     throw new RunDirError(`cannot read ${join(runDir, "context.json")}: ${(error as Error).message}`);
   }
   const collected = collectFindings(runDir, context);
+  const candidates = readCandidates(runDir);
+  const input = { ...collected, candidates, buckets: bucketVerdicts(runDir, candidates, collected.findings) };
   const reportPath = join(runDir, "report.md");
-  writeFileSync(reportPath, renderReport(context, collected));
+  writeFileSync(reportPath, renderReport(context, input));
   appendTrace(runDir, {
     step: "report",
     status: "ok",
     started_at: startedAt.toISOString(),
     duration_ms: Date.now() - startedAt.getTime(),
     findings: collected.findings.length,
+    confirmed: input.buckets.confirmed.length,
+    judgment: input.buckets.judgment.length,
+    dismissed: input.buckets.dismissed.length,
   });
-  return { reportPath, summary: renderSummary(context, collected, reportPath) };
+  return { reportPath, summary: renderSummary(input, reportPath) };
 }
 
 export function main(argv: string[]): number {

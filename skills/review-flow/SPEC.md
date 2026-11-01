@@ -131,6 +131,7 @@ worktree/           # pr mode only: gh pr checkout of the PR head
 snapshot/           # branch mode only: changed files + context read via git show
 findings/<lens>.json
 candidates.json     # stage 3
+candidates/<id>.json # stage 3: one candidate per file, the only candidate a verifier reads
 verdicts/<id>.json  # stage 4
 scratch/<id>/       # temporary worktrees (deleted after verification)
 ranked.json         # stage 5
@@ -313,6 +314,7 @@ Each step must be usable on its own. Prefer simple stubs over half-built feature
 - [x] Step 1: Prepare stage (`current` mode)
 - [x] Step 2: Review stage (subagents per lens, findings + validation)
 - [x] Step 3: Walking skeleton (report.mjs + SKILL.md wiring; first dogfood run)
+- [x] Step 4: Verification (read-only verifiers, placeholder ranking; dogfood run pending)
 
 ### Next steps
 
@@ -323,13 +325,13 @@ Goal: a complete run that produces a report, even without verification.
 - Claude Code only, `current` mode only, fixed lenses, default models.
 - **Done when:** "review my changes" on this repo produces `report.md`. First dogfood run happens here.
 
-#### Step 4. Verification (the core value; the next thing to build)
+#### Step 4. Verification (the core value)
 - Stage 4 verifier subagents: **read-only**, `traced`/`reasoned` evidence only (no execution yet), independence rules, `Verdict` schema and validation.
 - Placeholder ranking: confirmed first, uncertain second, refuted in Dismissed.
 - Report buckets: Confirmed / Needs judgment / Dismissed.
 - **Done when:** every reported item has a verdict file, and dogfooding this step's diff shows refuted items filtered out.
 
-#### Step 5. Dedup + scoring + rigor
+#### Step 5. Dedup + scoring + rigor (the next thing to build)
 - Stage 3 deterministic `dedup.mjs` (the merger LLM pass is optional and can come later).
 - Stage 5 `score.mjs` with the §8 formula and buckets, deterministic output.
 - The `rigor` input (§4 table minus execution).

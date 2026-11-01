@@ -18,63 +18,6 @@ function isEntry(moduleUrl, name) {
 function readContext(runDir) {
 	return JSON.parse(readFileSync(join(runDir, "context.json"), "utf8"));
 }
-// src/git.ts
-var GitError = class extends Error {};
-let env = {
-	...process.env,
-	GIT_OPTIONAL_LOCKS: "0"
-};
-/**
-* Runs git in `cwd` and returns stdout. `okCodes` lists the exit codes that count as success
-* (`git diff --no-index` exits 1 when the files differ).
-*/
-function git(cwd, args, okCodes = [0]) {
-	const result = spawnSync("git", args, {
-		cwd,
-		env,
-		encoding: "utf8",
-		maxBuffer: 268435456
-	});
-	if (result.error) throw new GitError(`git ${args.join(" ")}: ${result.error.message}`);
-	if (!okCodes.includes(result.status ?? -1)) throw new GitError(`git ${args.join(" ")} failed: ${result.stderr.trim() || `exit ${result.status}`}`);
-	return result.stdout;
-}
-function tryGit(cwd, args) {
-	try {
-		return git(cwd, args).trim();
-	} catch {
-		return null;
-	}
-}
-function repoRootFrom(dir) {
-	return tryGit(dir, ["rev-parse", "--show-toplevel"]);
-}
-// src/run-dir.ts
-/** Every run lives under `<repo>/.review-flow/runs/`. */
-const RUNS_DIR = join(".review-flow", "runs");
-var RunDirError = class extends Error {};
-function isInside(child, parent) {
-	const rel = relative(parent, child);
-	return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
-}
-/**
-* Resolves a run-directory argument and refuses anything outside `<repo>/.review-flow/runs/`.
-* Returns the real path of the run directory and of the repo that owns it.
-*/
-function resolveRunDir(arg) {
-	const abs = resolve(arg);
-	if (!existsSync(abs) || !statSync(abs).isDirectory()) throw new RunDirError(`run directory not found: ${arg}`);
-	const runDir = realpathSync(abs);
-	const repoRoot = repoRootFrom(runDir);
-	if (!repoRoot || !isInside(runDir, join(realpathSync(repoRoot), RUNS_DIR))) throw new RunDirError(`refusing ${arg}: run directories must be inside <repo>/${RUNS_DIR.split(sep).join("/")}/`);
-	return {
-		runDir,
-		repoRoot: realpathSync(repoRoot)
-	};
-}
-function appendTrace(runDir, entry) {
-	appendFileSync(join(runDir, "trace.jsonl"), `${JSON.stringify(entry)}\n`);
-}
 Object.freeze({ status: "aborted" });
 /* @__NO_SIDE_EFFECTS__ */
 function $constructor(name, initializer, params) {
@@ -3234,17 +3177,7 @@ function validateText(kind, text) {
 	}
 	return validateValue(kind, input);
 }
-// src/report.ts
-/**
-* Report (walking skeleton): turns `findings/*.json` into `report.md`, grouped by severity, then file.
-* Findings are unverified at this stage; verification, scoring and buckets come later.
-*
-* Usage: node scripts/dist/report.mjs <runDir>
-*
-* Prints a short summary (counts and top items), then the report path as the last line of stdout.
-* Output depends only on the run directory's files, so re-runs are byte-identical.
-* Exit 0 on success (also when some findings files are invalid; the report lists them), 2 on usage errors.
-*/
+// src/findings.ts
 const SEVERITY_RANK = Object.fromEntries(SEVERITIES.map((severity, index) => [severity, index]));
 function compareFindings(a, b) {
 	return SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || a.file.localeCompare(b.file) || a.line_start - b.line_start || a.id.localeCompare(b.id, void 0, { numeric: true });
@@ -3293,6 +3226,140 @@ function collectFindings(runDir, context) {
 		outcomes
 	};
 }
+// src/git.ts
+var GitError = class extends Error {};
+let env = {
+	...process.env,
+	GIT_OPTIONAL_LOCKS: "0"
+};
+/**
+* Runs git in `cwd` and returns stdout. `okCodes` lists the exit codes that count as success
+* (`git diff --no-index` exits 1 when the files differ).
+*/
+function git(cwd, args, okCodes = [0]) {
+	const result = spawnSync("git", args, {
+		cwd,
+		env,
+		encoding: "utf8",
+		maxBuffer: 268435456
+	});
+	if (result.error) throw new GitError(`git ${args.join(" ")}: ${result.error.message}`);
+	if (!okCodes.includes(result.status ?? -1)) throw new GitError(`git ${args.join(" ")} failed: ${result.stderr.trim() || `exit ${result.status}`}`);
+	return result.stdout;
+}
+function tryGit(cwd, args) {
+	try {
+		return git(cwd, args).trim();
+	} catch {
+		return null;
+	}
+}
+function repoRootFrom(dir) {
+	return tryGit(dir, ["rev-parse", "--show-toplevel"]);
+}
+// src/run-dir.ts
+/** Every run lives under `<repo>/.review-flow/runs/`. */
+const RUNS_DIR = join(".review-flow", "runs");
+var RunDirError = class extends Error {};
+function isInside(child, parent) {
+	const rel = relative(parent, child);
+	return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
+}
+/**
+* Resolves a run-directory argument and refuses anything outside `<repo>/.review-flow/runs/`.
+* Returns the real path of the run directory and of the repo that owns it.
+*/
+function resolveRunDir(arg) {
+	const abs = resolve(arg);
+	if (!existsSync(abs) || !statSync(abs).isDirectory()) throw new RunDirError(`run directory not found: ${arg}`);
+	const runDir = realpathSync(abs);
+	const repoRoot = repoRootFrom(runDir);
+	if (!repoRoot || !isInside(runDir, join(realpathSync(repoRoot), RUNS_DIR))) throw new RunDirError(`refusing ${arg}: run directories must be inside <repo>/${RUNS_DIR.split(sep).join("/")}/`);
+	return {
+		runDir,
+		repoRoot: realpathSync(repoRoot)
+	};
+}
+function appendTrace(runDir, entry) {
+	appendFileSync(join(runDir, "trace.jsonl"), `${JSON.stringify(entry)}\n`);
+}
+// src/report.ts
+/**
+* Report: turns verified candidates into `report.md`, bucketed by verdict.
+* Ranking is a placeholder until scoring (step 5): Confirmed, then Needs judgment (uncertain), then Dismissed
+* (refuted); within a bucket by reassessed severity, evidence strength, file and line.
+*
+* Usage: node scripts/dist/report.mjs <runDir>
+*
+* Needs `candidates.json` (from dedup.mjs) and reads `verdicts/<id>.json` for each candidate. Candidates whose
+* verdict is missing or invalid, and findings over the verification limit, are listed but never ranked.
+* Prints a short summary (counts and top items), then the report path as the last line of stdout.
+* Output depends only on the run directory's files, so re-runs are byte-identical.
+* Exit 0 on success (also when some findings or verdicts are invalid; the report lists them), 2 on usage errors
+* or an incomplete run directory.
+*/
+const EVIDENCE_RANK = {
+	executed: 0,
+	traced: 1,
+	reasoned: 2
+};
+function compareVerified(a, b) {
+	return SEVERITY_RANK[a.verdict.severity_reassessed] - SEVERITY_RANK[b.verdict.severity_reassessed] || EVIDENCE_RANK[a.verdict.evidence_type] - EVIDENCE_RANK[b.verdict.evidence_type] || compareFindings(a.candidate, b.candidate);
+}
+function readCandidates(runDir) {
+	const path = join(runDir, "candidates.json");
+	if (!existsSync(path)) throw new RunDirError(`${path} not found: run dedup.mjs first`);
+	const result = validateText("candidates", readFileSync(path, "utf8"));
+	if (!result.ok) throw new RunDirError(`${path} is invalid: ${result.errors.slice(0, 3).join("; ")}`);
+	return result.data;
+}
+/** Reads `verdicts/<id>.json` for each candidate and sorts the results into placeholder buckets. */
+function bucketVerdicts(runDir, candidates, findings) {
+	const verified = [];
+	const problems = [];
+	for (const candidate of candidates) {
+		const path = join(runDir, "verdicts", `${candidate.id}.json`);
+		if (!existsSync(path)) {
+			problems.push({
+				candidate,
+				status: "missing",
+				errors: []
+			});
+			continue;
+		}
+		const result = validateText("verdict", readFileSync(path, "utf8"));
+		if (!result.ok) {
+			problems.push({
+				candidate,
+				status: "invalid",
+				errors: result.errors
+			});
+			continue;
+		}
+		const verdict = result.data;
+		if (verdict.candidate_id !== candidate.id) {
+			problems.push({
+				candidate,
+				status: "invalid",
+				errors: [`candidate_id: expected "${candidate.id}", got "${verdict.candidate_id}"`]
+			});
+			continue;
+		}
+		verified.push({
+			candidate,
+			verdict
+		});
+	}
+	const sorted = verified.toSorted(compareVerified);
+	const covered = new Set(candidates.flatMap((c) => c.source_ids));
+	return {
+		confirmed: sorted.filter((v) => v.verdict.verdict === "confirmed"),
+		judgment: sorted.filter((v) => v.verdict.verdict === "uncertain"),
+		dismissed: sorted.filter((v) => v.verdict.verdict === "refuted"),
+		problems,
+		unverified: findings.filter((f) => !covered.has(f.id))
+	};
+}
 /** A code fence longer than any backtick run inside `text`. */
 function fence(text) {
 	const longest = Math.max(2, ...[...text.matchAll(/`+/g)].map((match) => match[0].length));
@@ -3305,76 +3372,129 @@ function location(finding) {
 function quote(text) {
 	return text.trim().split("\n").map((line) => line ? `> ${line}` : ">").join("\n");
 }
-function renderFinding(finding) {
+function severityLabel({ candidate, verdict }) {
+	return verdict.severity_reassessed === candidate.severity ? verdict.severity_reassessed : `${verdict.severity_reassessed} (reviewer: ${candidate.severity})`;
+}
+function renderItem(item) {
+	const { candidate, verdict } = item;
 	const lines = [
-		`#### ${finding.title}`,
+		`### ${candidate.title}`,
 		"",
-		`\`${location(finding)}\` · ${finding.category} · ${finding.id}`,
+		`\`${location(candidate)}\` · ${severityLabel(item)} · ${candidate.category} · ${verdict.impact} · effort: ${verdict.effort} · ${candidate.id} (${candidate.source_ids.join(", ")})`,
 		"",
-		finding.claim.trim(),
+		candidate.claim.trim(),
 		"",
-		"**Evidence**",
+		`**Verifier** (${verdict.verdict}, ${verdict.evidence_type})`,
 		"",
-		quote(finding.evidence),
+		quote(verdict.evidence),
 		""
 	];
-	if (finding.suggested_fix) {
-		const fix = finding.suggested_fix.trim();
+	const assessment = `${verdict.fix_assessment.status}${verdict.fix_assessment.notes.trim() ? `: ${verdict.fix_assessment.notes.trim()}` : ""}`;
+	if (candidate.suggested_fix) {
+		const fix = candidate.suggested_fix.trim();
 		const isDiff = /^(diff --git|--- |@@ )/m.test(fix);
 		const marks = fence(fix);
-		lines.push("<details><summary>Suggested fix</summary>", "", `${marks}${isDiff ? "diff" : ""}`, fix, marks, "", "</details>", "");
-	}
+		lines.push(`<details><summary>Suggested fix (assessment: ${verdict.fix_assessment.status})</summary>`, "", `${marks}${isDiff ? "diff" : ""}`, fix, marks, "", `Assessment: ${assessment}`, "", "</details>", "");
+	} else if (verdict.fix_assessment.notes.trim()) lines.push(`Fix: ${assessment}`, "");
 	return lines;
 }
-function renderReport(context, collected) {
-	const { findings, outcomes } = collected;
+function html(text) {
+	return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function renderDismissed({ candidate, verdict }) {
+	return [
+		`<details><summary><b>${html(candidate.title)}</b> · <code>${html(location(candidate))}</code> · ${candidate.id} (${candidate.source_ids.join(", ")})</summary>`,
+		"",
+		candidate.claim.trim(),
+		"",
+		`**Verifier** (refuted, ${verdict.evidence_type})`,
+		"",
+		quote(verdict.evidence),
+		"",
+		"</details>",
+		""
+	];
+}
+function renderReport(context, input) {
+	const { findings, outcomes, candidates, buckets } = input;
 	const t = context.target;
-	const counts = SEVERITIES.map((severity) => [severity, findings.filter((f) => f.severity === severity).length]);
 	const lines = [
 		`# Review: ${t.branch ?? "detached HEAD"} (current)`,
 		"",
-		"> ⚠️ Findings are **unverified** reviewer output. Independent verification is not implemented yet.",
+		"> Each candidate was checked by an independent, read-only verifier (traced or reasoned evidence; nothing was executed). Ranking is provisional until scoring lands.",
 		"",
 		`- **Target:** current · branch \`${t.branch ?? "(detached)"}\` · HEAD \`${t.head_sha.slice(0, 12)}\`${t.dirty ? " · dirty (uncommitted changes included)" : ""}`,
 		`- **Base:** \`${t.base_ref}\` (merge-base \`${t.merge_base.slice(0, 12)}\`)`,
 		`- **Rigor:** ${context.rigor} · **Harness:** ${context.harness} · **Files changed:** ${context.files.length}`,
 		`- **Lenses:** ${outcomes.map((o) => `${o.lens} (${o.status === "ok" ? o.count : o.status})`).join(", ")}`,
-		`- **Findings:** ${findings.length}${findings.length ? ` (${counts.filter(([, n]) => n).map(([s, n]) => `${n} ${s}`).join(", ")})` : ""}`,
+		`- **Verified:** ${candidates.length} of ${findings.length} finding(s) (limit ${context.limits.maxVerified})`,
+		`- **Results:** ${buckets.confirmed.length} confirmed · ${buckets.judgment.length} need judgment · ${buckets.dismissed.length} dismissed${buckets.problems.length ? ` · ${buckets.problems.length} verification failed` : ""}${buckets.unverified.length ? ` · ${buckets.unverified.length} not verified (over limit)` : ""}`,
 		""
 	];
-	const problems = outcomes.filter((o) => o.status !== "ok");
-	if (problems.length) {
+	const reviewerProblems = outcomes.filter((o) => o.status !== "ok");
+	if (reviewerProblems.length) {
 		lines.push("## Reviewer problems", "");
-		for (const o of problems) {
+		for (const o of reviewerProblems) {
 			lines.push(`- \`${o.file}\`: ${o.status === "missing" ? "not written (reviewer failed or did not finish)" : "invalid, skipped"}`);
 			for (const error of o.errors.slice(0, 5)) lines.push(`  - ${error}`);
 			if (o.errors.length > 5) lines.push(`  - …and ${o.errors.length - 5} more`);
 		}
 		lines.push("");
 	}
-	if (!findings.length) lines.push("No findings.", "");
-	for (const [severity, count] of counts) {
-		if (!count) continue;
-		lines.push(`## ${severity[0].toUpperCase()}${severity.slice(1)} (${count})`, "");
-		let file;
-		for (const finding of findings.filter((f) => f.severity === severity)) {
-			if (finding.file !== file) {
-				file = finding.file;
-				lines.push(`### \`${file}\``, "");
-			}
-			lines.push(...renderFinding(finding));
+	if (buckets.problems.length) {
+		lines.push("## Verification problems", "", "These candidates have no usable verdict and are not ranked.", "");
+		for (const p of buckets.problems) {
+			lines.push(`- \`verdicts/${p.candidate.id}.json\`: ${p.status === "missing" ? "not written" : "invalid"} · [${p.candidate.severity}] ${p.candidate.title} (\`${location(p.candidate)}\`)`);
+			for (const error of p.errors.slice(0, 5)) lines.push(`  - ${error}`);
+			if (p.errors.length > 5) lines.push(`  - …and ${p.errors.length - 5} more`);
 		}
+		lines.push("");
+	}
+	if (!candidates.length) lines.push("No findings.", "");
+	const sections = [
+		[
+			"Confirmed",
+			buckets.confirmed,
+			renderItem
+		],
+		[
+			"Needs judgment",
+			buckets.judgment,
+			renderItem
+		],
+		[
+			"Dismissed",
+			buckets.dismissed,
+			renderDismissed
+		]
+	];
+	for (const [title, items, render] of sections) {
+		if (!items.length) continue;
+		lines.push(`## ${title} (${items.length})`, "");
+		for (const item of items) lines.push(...render(item));
+	}
+	if (buckets.unverified.length) {
+		lines.push(`## Not verified (${buckets.unverified.length})`, "", "Over the verification limit; unchecked reviewer output.", "");
+		for (const f of buckets.unverified) lines.push(`- [${f.severity}] ${f.title} (\`${location(f)}\`) · ${f.id}`);
+		lines.push("");
 	}
 	return `${lines.join("\n").trimEnd()}\n`;
 }
 /** The chat summary the agent relays: at most 10 lines. */
-function renderSummary(context, collected, reportPath) {
-	const { findings, outcomes } = collected;
-	const counts = SEVERITIES.map((s) => `${findings.filter((f) => f.severity === s).length} ${s}`).join(" · ");
-	const lines = [`${findings.length} unverified finding(s): ${counts}`];
-	const problems = outcomes.filter((o) => o.status !== "ok");
-	if (problems.length) lines.push(`reviewer problems: ${problems.map((o) => `${o.lens} ${o.status}`).join(", ")}`);
-	for (const finding of findings.slice(0, 10 - lines.length - 1)) lines.push(`- [${finding.severity}] ${finding.title} (${location(finding)})`);
+function renderSummary(input, reportPath) {
+	const { outcomes, buckets } = input;
+	const lines = [`${buckets.confirmed.length} confirmed · ${buckets.judgment.length} need judgment · ${buckets.dismissed.length} dismissed`];
+	const problems = [...outcomes.filter((o) => o.status !== "ok").map((o) => `reviewer ${o.lens} ${o.status}`), ...buckets.problems.map((p) => `verdict ${p.candidate.id} ${p.status}`)];
+	if (buckets.unverified.length) problems.push(`${buckets.unverified.length} finding(s) over the verification limit`);
+	if (problems.length) lines.push(`problems: ${problems.join(", ")}`);
+	const top = [...buckets.confirmed.map((v) => ({
+		v,
+		tag: v.verdict.severity_reassessed
+	})), ...buckets.judgment.map((v) => ({
+		v,
+		tag: `${v.verdict.severity_reassessed}, needs judgment`
+	}))];
+	for (const { v, tag } of top.slice(0, 10 - lines.length - 1)) lines.push(`- [${tag}] ${v.candidate.title} (${location(v.candidate)})`);
 	lines.push(reportPath);
 	return lines.join("\n");
 }
@@ -3388,18 +3508,27 @@ function report(runDirArg) {
 		throw new RunDirError(`cannot read ${join(runDir, "context.json")}: ${error.message}`);
 	}
 	const collected = collectFindings(runDir, context);
+	const candidates = readCandidates(runDir);
+	const input = {
+		...collected,
+		candidates,
+		buckets: bucketVerdicts(runDir, candidates, collected.findings)
+	};
 	const reportPath = join(runDir, "report.md");
-	writeFileSync(reportPath, renderReport(context, collected));
+	writeFileSync(reportPath, renderReport(context, input));
 	appendTrace(runDir, {
 		step: "report",
 		status: "ok",
 		started_at: startedAt.toISOString(),
 		duration_ms: Date.now() - startedAt.getTime(),
-		findings: collected.findings.length
+		findings: collected.findings.length,
+		confirmed: input.buckets.confirmed.length,
+		judgment: input.buckets.judgment.length,
+		dismissed: input.buckets.dismissed.length
 	});
 	return {
 		reportPath,
-		summary: renderSummary(context, collected, reportPath)
+		summary: renderSummary(input, reportPath)
 	};
 }
 function main(argv) {
@@ -3417,4 +3546,4 @@ function main(argv) {
 	}
 }
 if (isEntry(import.meta.url, "report")) process.exitCode = main(process.argv.slice(2));
-export { collectFindings, main, renderReport, renderSummary, report };
+export { bucketVerdicts, main, readCandidates, renderReport, renderSummary, report };

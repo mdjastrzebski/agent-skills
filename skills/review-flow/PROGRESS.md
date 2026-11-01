@@ -12,7 +12,7 @@ Before §14 existed, work followed a different phase plan. Its phases 1–2 (sch
 | 1 | Prepare stage, `current` mode | ✅ done (minimal, built in step 3) |
 | 2 | Review stage: reviewer + lens prompts, subagent per lens, validation | ✅ done (built in step 3) |
 | 3 | Walking skeleton: minimal `report.mjs`, SKILL.md wiring 1 → 2 → report, first dogfood run | ✅ done |
-| 4 | Verification (read-only verifiers, verdicts, placeholder ranking) | ⬜ |
+| 4 | Verification (read-only verifiers, verdicts, placeholder ranking) | ✅ done (dogfood run pending) |
 | 5 | Dedup + scoring + rigor, vitest for dedup/scoring/rendering | ⬜ |
 | 6 | Executed verification (`scratch.mjs` worktrees) | ⬜ |
 | 7 | Config + models per role applied to subagents | ⬜ (config itself done in foundations) |
@@ -60,3 +60,15 @@ Before §14 existed, work followed a different phase plan. Its phases 1–2 (sch
 - tsconfig target is ES2023 so `toSorted` (required by oxlint's `no-array-sort`) typechecks.
 - Repo-root `review-flow.config.json` keeps `dist/`, generated schemas and lockfiles out of dogfood diffs.
 - SKILL.md: Claude Code, `current` mode only, general-purpose subagents with `model: models.reviewer`, at most `limits.parallel` at a time, prompt that points at `prompts/reviewer.md` + the lens file by path (the subagent reads them; the parent doesn't paste them). Root README catalog entry added.
+
+### Step 4: verification
+- **Stub `dedup.mjs <runDir>`** (stage 3 placeholder until step 5): one candidate per valid finding, no clustering, ordered by severity/file/line/finding id (`compareFindings`), cut to `limits.maxVerified`. Candidate ids are `c-<n>` in that order; `source_ids` = the finding id. Writes `candidates.json`, recreates `candidates/` with one `candidates/<id>.json` per candidate, and creates `verdicts/`. Last stdout line: `candidates: <id> <id> …` (just `candidates:` when empty). Exit 2 on usage/run-dir errors.
+- **`candidates/<id>.json` is new in the run dir** (added to SPEC §5): acceptance criterion 2 says no verifier input may contain another candidate, so verifiers can't read `candidates.json`. `verifier.md` also forbids `findings/`, other candidates, `verdicts/` and `report.md`. Step 5's real dedup must keep writing these per-candidate files.
+- Stale verdicts are not detected: re-running `dedup.mjs` after findings change can renumber candidates while old `verdicts/c-<n>.json` stay. Fine while a run is one pass; revisit if runs become resumable mid-stage.
+- `prompts/verifier.md`: disprove-by-default stance, read-only, no execution (`traced`/`reasoned` only; `executed` is forbidden by the prompt, not by the schema), untrusted content, the verdict fields with definitions, validate with `validate.mjs verdict` (max 2 retries), one-line reply.
+- `collectFindings` / `compareFindings` / `SEVERITY_RANK` moved to `src/findings.ts` (shared by dedup and report; CLI modules must not import each other).
+- **`report.mjs`** now requires `candidates.json` (exit 2 "run dedup.mjs first" otherwise) and reads `verdicts/<id>.json` per candidate. A verdict counts only if it validates and its `candidate_id` matches the file. Placeholder ranking: buckets Confirmed / Needs judgment (all `uncertain`) / Dismissed (`refuted`), each sorted by `severity_reassessed`, evidence type (executed < traced < reasoned), then `compareFindings`. Missing/invalid verdicts go to "Verification problems" and findings over the limit to "Not verified"; neither is ranked. Dismissed items render collapsed (`<details>`, title/location HTML-escaped). Summary: bucket counts, a `problems:` line when needed, confirmed then needs-judgment items, report path; ≤10 lines. Still no `report.json`.
+- SKILL.md: stages 3 (dedup) and 4 (one fresh general-purpose verifier per candidate, `model: models.verifier`, ≤ `limits.parallel` at a time, re-spawn a missing verdict once) wired between review and report.
+- Tests: `test/run-dir.ts` (fake run dir helpers, shared), `test/dedup.test.ts`, `test/report.test.ts` rewritten for candidates and verdicts.
+- **Dogfood run not done in this session** (the session was scoped to "stop when tests pass"). Before step 5: run "review my changes" on a step-4-sized diff, check that every reported item has a verdict file and refuted items land in Dismissed, and log it in `dogfood-log.md`.
+
