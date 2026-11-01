@@ -32,9 +32,13 @@ export function runDir(
       head_sha: "b".repeat(40),
       dirty: true,
     },
-    rigor: "medium",
+    preset: "standard",
     limits: { maxVerified, parallel: 4, allowExecution: true },
-    models: { reviewer: "sonnet", merger: "haiku", verifier: "opus" },
+    models: {
+      reviewer: { model: "opus", effort: "medium" },
+      merger: { model: "haiku", effort: null },
+      verifier: { model: "opus", effort: "medium" },
+    },
     scoring: loadDefaults().scoring,
     lenses: lenses.map((name) => ({
       name,

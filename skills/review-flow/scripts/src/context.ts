@@ -39,6 +39,10 @@ export function detectSpecs(changed: string[], allFiles: string[]): string[] {
     .slice(0, MAX_SPECS);
 }
 
+export type Role = "reviewer" | "merger" | "verifier";
+/** `effort` null = the harness default. */
+export type RoleModel = { model: string; effort: string | null };
+
 /** `context.json`: everything later stages need, so no step re-derives it. Paths are absolute unless noted. */
 export type Context = {
   version: 1;
@@ -58,9 +62,10 @@ export type Context = {
     head_sha: string;
     dirty: boolean;
   };
-  rigor: string;
+  preset: string;
   limits: { maxVerified: number; parallel: number; allowExecution: boolean };
-  models: { reviewer: string; merger: string; verifier: string };
+  /** Per role, ready to pass to the harness. Cursor's effort is folded into `model` (`opus[effort=high]`), so it is null there. */
+  models: Record<Role, RoleModel>;
   /** §8 weights from the effective config, copied so re-scoring a run never depends on today's config. */
   scoring: Config["scoring"];
   lenses: Lens[];

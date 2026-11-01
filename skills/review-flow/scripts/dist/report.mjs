@@ -3424,7 +3424,7 @@ function renderReport(context, input) {
 		"",
 		`- **Target:** current · branch \`${t.branch ?? "(detached)"}\` · HEAD \`${t.head_sha.slice(0, 12)}\`${t.dirty ? " · dirty (uncommitted changes included)" : ""}`,
 		`- **Base:** \`${t.base_ref}\` (merge-base \`${t.merge_base.slice(0, 12)}\`)`,
-		`- **Rigor:** ${context.rigor} · **Harness:** ${context.harness} · **Files changed:** ${context.files.length}`,
+		`- **Preset:** ${context.preset} · **Harness:** ${context.harness} · **Files changed:** ${context.files.length}`,
 		`- **Lenses:** ${outcomes.map((o) => `${o.lens} (${o.status === "ok" ? o.count : o.status})`).join(", ")}`,
 		`- **Verified:** ${candidates.length} candidate(s) from ${findings.length} finding(s) (limit ${context.limits.maxVerified})`,
 		`- **Results:** ${counts(ranked)}${ranked.problems.length ? ` · ${ranked.problems.length} verification failed` : ""}${unverified.length ? ` · ${unverified.length} not verified (over limit)` : ""}`,

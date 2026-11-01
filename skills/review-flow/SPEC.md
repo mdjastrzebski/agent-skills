@@ -28,7 +28,7 @@ review-flow/
 │   ├── reviewer.md           # shared reviewer instructions + output contract
 │   ├── lenses/               # one file per lens (focus area)
 │   │   ├── correctness.md
-│   │   ├── correctness-alt.md # high rigor: the second correctness pass (different seed prompt)
+│   │   ├── correctness-alt.md # deep preset: the second correctness pass (different seed prompt)
 │   │   ├── security.md
 │   │   ├── performance.md
 │   │   ├── tests.md
@@ -49,15 +49,15 @@ Requirements:
 
 ## 4. Invocation
 
-User says e.g. "review my changes", "review branch feature/cart", "review PR 123", or "review https://github.com/org/repo/pull/123 at high rigor".
+User says e.g. "review my changes", "review branch feature/cart", "review PR 123", or "review https://github.com/org/repo/pull/123, deep review".
 
 Inputs:
 | Input | Values | Default |
 |---|---|---|
 | `target` | `current` \| `branch:<name>` \| `pr:<number-or-url>` | `current` |
 | `base` | base ref to diff against | PR: the PR's base branch; otherwise the repo default branch (`origin/HEAD`), falling back to `main`/`master` |
-| `rigor` | `low` \| `medium` \| `high` | `medium` |
-| `lenses` | subset of the available lenses | set by rigor |
+| `preset` | `standard` \| `deep` | `standard` |
+| `lenses` | subset of the available lenses | set by the preset |
 
 Target modes:
 | Mode | What gets reviewed | Checkout | Where code is read from |
@@ -68,13 +68,16 @@ Target modes:
 
 The agent resolves the mode from the user's wording. If the wording is ambiguous ("review this"), it uses `current` when there are uncommitted changes or the branch is ahead of `base`; otherwise it asks.
 
-Rigor controls effort only, never the reporting threshold:
-| | low | medium | high |
-|---|---|---|---|
-| Lenses | correctness, security | + tests, performance, spec (when spec documents are found) | + a second correctness pass with a different seed prompt |
-| Verifier may execute code | no | yes | yes |
-| Max findings verified | 10 | 25 | 50 |
-| Parallel subagents | 3 | 4 | 6 |
+The preset controls effort only, never the reporting threshold. A preset is a named bundle of settings, so it can take more keys later (e.g. models) without a rename:
+| | standard | deep |
+|---|---|---|
+| Lenses | correctness, security, tests, performance, spec (when spec documents are found) | + a second correctness pass with a different seed prompt |
+| Verifier may execute code | yes | yes |
+| Max findings verified | 25 | 50 |
+| Parallel subagents | 4 | 6 |
+| Claude Code reviewer / verifier | opus, effort medium | opus, effort high |
+| Claude Code merger | haiku, harness effort | haiku, harness effort |
+| Cursor (all roles) | `auto`, harness effort | `auto`, harness effort |
 
 ## 4a. Configuration
 
@@ -90,20 +93,22 @@ Config is JSON with a `$schema` field that points to `schemas/config.schema.json
 ```jsonc
 {
   "$schema": "./node_modules/.review-flow/config.schema.json", // or the path printed by `config init`
-  "rigor": "medium",
+  "preset": "standard",
   "base": "main",
   "specs": ["docs/specs/checkout.md"], // spec documents for the spec lens; default: auto-detect SPEC.md, PRD.md, REQUIREMENTS.md, *.spec.md, specs/**.md near the changed files
-  "models": {
-    // per harness, because model names differ; roles: reviewer, merger, verifier
-    "claude": { "reviewer": "sonnet", "merger": "haiku", "verifier": "opus" },
-    "cursor": { "reviewer": "auto", "merger": "auto", "verifier": "auto" }
-  },
   "lenses": {
     "enabled": ["correctness", "security", "tests", "performance", "spec"],
     "custom": ["./.review-flow-lenses/accessibility.md"] // repo-specific lenses
   },
   "checks": { "typecheck": "yarn tsc --noEmit", "test": "yarn jest --findRelatedTests" }, // overrides auto-detection
-  "rigorPresets": { "high": { "maxVerified": 80 } },  // partial overrides of the §4 table
+  "presets": {                                       // partial overrides of the §4 table
+    "deep": {
+      "maxVerified": 80,
+      // per harness, because model names differ; roles: reviewer, merger, verifier
+      // effort: low | medium | high | xhigh | max, or null for the harness default
+      "models": { "claude": { "verifier": { "model": "opus", "effort": "max" } } }
+    }
+  },
   "scoring": { "fixBeforeMergeThreshold": 5 },         // overrides §8 weights/thresholds
   "ignore": ["**/*.snap", "ios/Pods/**", "**/generated/**"],
   "publish": { "includeFollowUps": true }
@@ -113,12 +118,12 @@ Config is JSON with a `$schema` field that points to `schemas/config.schema.json
 ### Commands (UX)
 - `node scripts/dist/config.mjs init` writes a minimal `review-flow.config.json` filled from auto-detection (the stack, check commands, base branch). Every key is commented out except the ones that differ from the defaults.
 - `node scripts/dist/config.mjs show` prints the **effective** config, with the source of each value (default / user / repo / override).
-- The agent runs `show` at the start of every run and puts a one-line summary in its first message, e.g. "rigor: medium · reviewer: sonnet · verifier: opus · lenses: 5". If no config file exists, it offers `init` once.
+- The agent runs `show` at the start of every run and puts a one-line summary in its first message, e.g. "preset: standard · reviewer: opus/medium · verifier: opus/medium · lenses: 5". If no config file exists, it offers `init` once.
 
 ### Applying models
-- `prepare.mjs` resolves the model for each role into `context.json`, so the agent never interprets the config itself.
-- **Claude Code:** pass the model when spawning each subagent (the subagent tool's model parameter, or `model:` frontmatter in the skill's bundled agent definitions).
-- **Cursor:** apply it if the installed version supports per-subagent models. If it doesn't, ignore the setting with a **visible warning** in the chat summary and in the report header, e.g. "verifier model 'X' not applied: unsupported by this harness". Never fail silently.
+- `prepare.mjs` resolves the model and effort for each role from the chosen preset into `context.json` (`models.<role> = { model, effort }`), so the agent never interprets the config itself.
+- **Claude Code:** pass the model and effort when spawning each subagent (the Agent tool's `model` and `effort` parameters). A null effort is left unset, so the subagent gets the harness default.
+- **Cursor:** takes effort as a model option, so `prepare` folds it into the model id (`claude-opus-5[effort=high]`) and writes a null `effort`. A model id that already has options plus an `effort` is an error. Apply the model if the installed version supports per-subagent models. If it doesn't, ignore the setting with a **visible warning** in the chat summary and in the report header, e.g. "verifier model 'X' not applied: unsupported by this harness". Never fail silently.
 - Record the models actually used, per role, in `trace.jsonl` and the report header.
 
 ## 5. Run directory
@@ -145,7 +150,7 @@ trace.jsonl         # one line per step/subagent: start, end, status, durations
 ## 6. Stages (runtime pipeline)
 
 ### Stage 1: Prepare (script)
-`node scripts/dist/prepare.mjs --target <t> --rigor <r> [--lenses a,b]`
+`node scripts/dist/prepare.mjs --target <t> --preset <p> [--lenses a,b]`
 
 - Resolves the target:
   - `current`: `diff.patch` = `git diff <merge-base>` (working tree vs. merge-base, so committed and uncommitted changes are both included) plus untracked files as additions. `code_root` = repo root. Metadata: branch name, HEAD SHA, `dirty: true|false`.
@@ -156,7 +161,7 @@ trace.jsonl         # one line per step/subagent: start, end, status, durations
 - Detects the stack (RN, TS, test runner, `tsc` availability) from package.json.
 - Collects context for each changed file: the changed hunks, the full file (capped at ~800 lines), direct imports, and the matching test files.
 - Finds the spec documents for the `spec` lens (config `specs`, else auto-detected) and lists them in `context.json`. In `pr` mode the PR description counts as spec input too.
-- Writes `context.json` with the PR metadata, stack, check commands (`typecheck`, `test`, which may be null), the list of lenses with their prompt file paths, and the limits from the rigor table.
+- Writes `context.json` with the PR metadata, stack, check commands (`typecheck`, `test`, which may be null), the list of lenses with their prompt file paths, and the limits from the preset table.
 - Prints the run directory path as the last line of stdout.
 
 ### Stage 2: Review (agent → subagents)
@@ -170,14 +175,14 @@ For each lens, spawn **one subagent** with a self-contained prompt: `prompts/rev
 `node scripts/dist/dedup.mjs <runDir>`
 - Groups findings deterministically: same file, overlapping or ±3 lines, same category → one cluster.
 - Marks "possible duplicate" pairs: same file within ±10 lines but a different category, or high text similarity.
-- Writes `candidates.json` (`Candidate[]`, each carrying its source finding IDs), sorted by reviewer-assigned severity and truncated to the rigor limit.
+- Writes `candidates.json` (`Candidate[]`, each carrying its source finding IDs), sorted by reviewer-assigned severity and truncated to the preset limit.
 - If there are possible duplicates, the agent runs one `prompts/merger.md` pass (it may only merge, never add or edit claims), then re-runs `dedup.mjs --apply-merges`.
 
 ### Stage 4: Verify (agent → one subagent per candidate)
 For each candidate, spawn a **fresh subagent** with `prompts/verifier.md`, the run directory path and the candidate ID. Independence rules:
 - A verifier sees only its own candidate and the context, never the other findings or verdicts.
 - The default stance is **disprove**. Without concrete evidence the verdict is `refuted` or `uncertain`, never `confirmed`.
-- When rigor allows execution: `node scripts/dist/scratch.mjs create <runDir> <id>` gives a throwaway worktree that reproduces the reviewed code:
+- When the preset allows execution: `node scripts/dist/scratch.mjs create <runDir> <id>` gives a throwaway worktree that reproduces the reviewed code:
   - `current`: a worktree at HEAD with the uncommitted changes applied (`git diff HEAD` plus untracked files)
   - `branch:<name>`: a worktree at the branch tip
   - `pr:<n>`: a worktree at `headRefOid`
@@ -193,7 +198,7 @@ For each candidate, spawn a **fresh subagent** with `prompts/verifier.md`, the r
 `node scripts/dist/report.mjs <runDir>` → `report.md` + `report.json`.
 - Buckets: **Fix before merge**, **Follow-up**, **Dismissed** (refuted or uncertain-low), plus a **Needs human judgment** bucket for uncertain findings with high severity.
 - Each item lists title, location (`file:line`; in `pr` mode, linked to the PR at its head SHA; otherwise a plain path), the claim, verifier evidence, the score breakdown, the recommended action and the suggested fix with its assessment.
-- A header with the target (mode, branch/PR, base, HEAD SHA, dirty flag), rigor, lenses, counts per bucket, duration, and harness.
+- A header with the target (mode, branch/PR, base, HEAD SHA, dirty flag), preset, lenses, counts per bucket, duration, and harness.
 - The agent then replies in chat with a ≤10-line summary (the top items) and the path to `report.md`. It does not paste the whole report.
 - Finally `node scripts/dist/cleanup.mjs <runDir>` removes the worktrees and keeps every file.
 
@@ -208,7 +213,7 @@ For each candidate, spawn a **fresh subagent** with `prompts/verifier.md`, the r
 - Posts **one PR review with event `COMMENT`**, using `gh pr review <n> --comment --body-file github-review.md`. Never `--approve` or `--request-changes`.
 - Default content: **Fix before merge**, **Needs human judgment**, and **Follow-up** (collapsed in `<details>`). Dismissed items are left out, except for a one-line count. `--include` and `--exclude <ids>` let the agent apply the user's edits from the preview question.
 - Each item gets a title, severity, a `file:line` link at the head SHA, the claim, a short version of the verifier's evidence, and the suggested fix in a collapsed block.
-- Header: "🤖 Automated review (review-flow, rigor: <r>, harness: <h>). Findings were independently verified; please sanity-check." Footer: a hidden marker `<!-- review-flow run=<runId> head=<sha> -->`.
+- Header: "🤖 Automated review (review-flow, preset: <p>, harness: <h>). Findings were independently verified; please sanity-check." Footer: a hidden marker `<!-- review-flow run=<runId> head=<sha> -->`.
 - **Stale check:** if the PR head has moved since the run (`gh pr view --json headRefOid`), refuse unless the agent passes `--allow-stale` after the user has agreed. The body then states which SHA was reviewed.
 - **Duplicate check:** if a review with the same run marker already exists, refuse. If one from an earlier run exists, say so and post anyway only if the user confirms. The new body links the earlier review.
 - Records the posted review URL and timestamp in `report.json` and `trace.jsonl`.
@@ -263,7 +268,7 @@ Verdict = {
 
 - **Subagents.** Claude Code: use the built-in subagent (Task/Agent) tool. Cursor: use its subagent mechanism. Where none is available, run the steps sequentially in the main agent, but **re-read inputs from files** and keep the independence rules.
 - Subagent prompts must be **self-contained**: the role, the files to read, the output path and the validation command. Subagents never get the parent chat.
-- Respect the rigor parallelism cap.
+- Respect the preset parallelism cap.
 - Record the harness name in `trace.jsonl` and the report.
 - Cursor tends to be weaker at exploration, so the prompts must point at the exact files in `context.json` rather than asking the agent to search.
 
@@ -283,12 +288,12 @@ Verdict = {
 4. Re-running `score.mjs` and `report.mjs` on the same run directory produces byte-identical output.
 4a. In PR mode, nothing is posted without an explicit yes. `--dry-run` makes no network writes. A confirmed publish creates exactly one `COMMENT` review, and the stale and duplicate checks refuse as specified (covered by tests with a mocked `gh`).
 5. Script unit tests (vitest) cover schemas, dedup clustering, scoring and buckets, and report rendering.
-6. **Eval harness:** `scripts/src/eval.ts` runs the skill's deterministic parts against `eval/fixtures/` (≥5 PR diffs with seeded bugs and a known-findings file), and documents how to run the full flow on them. It reports precision and recall for each rigor level and each harness.
+6. **Eval harness:** `scripts/src/eval.ts` runs the skill's deterministic parts against `eval/fixtures/` (≥5 PR diffs with seeded bugs and a known-findings file), and documents how to run the full flow on them. It reports precision and recall for each preset and each harness.
 
 ## 12. Deliverables
 
 - The skill folder as in §3, with `dist/` built and committed
-- A README covering installation for Claude Code (`.claude/skills/` in a repo or user dir) and Cursor (its skills directory), example invocations, the rigor table, and how to tune the weights and lenses
+- A README covering installation for Claude Code (`.claude/skills/` in a repo or user dir) and Cursor (its skills directory), example invocations, the preset table, and how to tune the weights and lenses
 - Tests and eval fixtures
 
 ## 13. Open questions for the implementer to flag (don't guess silently)
@@ -317,7 +322,7 @@ Each step must be usable on its own. Prefer simple stubs over half-built feature
 - [x] Step 2: Review stage (subagents per lens, findings + validation)
 - [x] Step 3: Walking skeleton (report.mjs + SKILL.md wiring; first dogfood run)
 - [x] Step 4: Verification (read-only verifiers, placeholder ranking; dogfood run)
-- [x] Step 5: Dedup + scoring + rigor (deterministic dedup, score.mjs, second correctness pass; dogfood run)
+- [x] Step 5: Dedup + scoring + presets (deterministic dedup, score.mjs, second correctness pass; dogfood run)
 
 ### Next steps
 
@@ -334,10 +339,10 @@ Goal: a complete run that produces a report, even without verification.
 - Report buckets: Confirmed / Needs judgment / Dismissed.
 - **Done when:** every reported item has a verdict file, and dogfooding this step's diff shows refuted items filtered out.
 
-#### Step 5. Dedup + scoring + rigor
+#### Step 5. Dedup + scoring + presets
 - Stage 3 deterministic `dedup.mjs` (the merger LLM pass is optional and can come later).
 - Stage 5 `score.mjs` with the §8 formula and buckets, deterministic output.
-- The `rigor` input (§4 table minus execution).
+- The `preset` input (§4 table minus execution).
 - Unit tests (vitest) for dedup, scoring and report rendering.
 
 #### Step 6. Executed verification (the next thing to build)
@@ -363,7 +368,7 @@ Goal: a complete run that produces a report, even without verification.
 
 #### Step 11. Eval + tuning
 - Turn `dogfood-log.md` entries and seeded bugs into `eval/fixtures/` (≥5).
-- `eval.ts` reports precision and recall per rigor level and harness. Tune lenses, weights and model defaults.
+- `eval.ts` reports precision and recall per preset and harness. Tune lenses, weights and model defaults.
 
 ### Rules for the implementing agent
 - One step per session. Read SPEC.md and PROGRESS.md first.

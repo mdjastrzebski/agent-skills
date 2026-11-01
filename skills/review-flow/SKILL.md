@@ -1,6 +1,6 @@
 ---
 name: review-flow
-description: Use when the user asks to review their code, e.g. "review my changes", "review my branch", "review this before I commit/push", or "run review-flow". Reviews the current branch against its base, including uncommitted and untracked changes, with one reviewer subagent per lens (correctness, security, tests, performance, spec adherence), has an independent verifier subagent check each finding, and writes a local report. Defaults to the current checkout at medium rigor.
+description: Use when the user asks to review their code, e.g. "review my changes", "review my branch", "review this before I commit/push", or "run review-flow". Reviews the current branch against its base, including uncommitted and untracked changes, with one reviewer subagent per lens (correctness, security, tests, performance, spec adherence), has an independent verifier subagent check each finding, and writes a local report. Defaults to the current checkout with the standard preset.
 ---
 
 # review-flow
@@ -23,22 +23,22 @@ Status: only `current` mode is implemented, and verifiers read code but don't ex
 
 - **Target.** "My changes", "this", "my branch", or no target → `current`. A named branch or a PR (`branch:<name>`, `pr:<n>`, a PR URL) → tell the user only the current checkout can be reviewed so far, and stop.
 - **Base.** Default: the repo's default branch (detected). "Just my uncommitted changes" → `--base HEAD`. A named base → `--base <ref>`.
-- **Rigor.** `low` | `medium` | `high` if the user names one; otherwise omit (config default, usually `medium`). Rigor sets the lenses (high adds a second correctness pass, `correctness-alt`), how many candidates get verified, and how many subagents run at once; `prepare` resolves all of it into `context.json`.
+- **Preset.** `standard` | `deep` if the user names one ("deep review", "be thorough" → `deep`); otherwise omit (config default, usually `standard`). The preset sets the lenses (`deep` adds a second correctness pass, `correctness-alt`), the model and effort for each role, how many candidates get verified, and how many subagents run at once; `prepare` resolves all of it into `context.json`.
 - **Lenses.** Only if the user names some: `--lenses a,b`.
 
 ## Stage 1: Prepare
 
 ```bash
-node <skill>/scripts/dist/prepare.mjs [--base <ref>] [--rigor <r>] [--lenses a,b]
+node <skill>/scripts/dist/prepare.mjs [--base <ref>] [--preset <p>] [--lenses a,b]
 ```
 
-- The last stdout line is the run directory (`<runDir>`). The lines before it summarize target, files and lenses: tell the user in one line, e.g. "Reviewing feature/cart vs origin/main · 7 files · rigor: medium · lenses: correctness, security, tests, performance, spec".
+- The last stdout line is the run directory (`<runDir>`). The lines before it summarize target, files and lenses: tell the user in one line, e.g. "Reviewing feature/cart vs origin/main · 7 files · preset: standard · lenses: correctness, security, tests, performance, spec".
 - Exit 1 with `nothing to review` → tell the user there are no changes against the base and stop. Other exit 1 → show the message (config or git error) and stop. Exit 2 → you passed a bad flag; fix it.
-- Read `<runDir>/context.json` for `lenses` (each has `name`, `prompt`, `output`), `models.reviewer`, `models.verifier` and `limits.parallel`. Don't read the diff or the findings yourself; the subagents do.
+- Read `<runDir>/context.json` for `lenses` (each has `name`, `prompt`, `output`), `models.reviewer`, `models.verifier` (each `{ model, effort }`) and `limits.parallel`. Don't read the diff or the findings yourself; the subagents do.
 
 ## Stage 2: Review (one subagent per lens)
 
-Spawn one subagent per entry in `context.lenses`, at most `limits.parallel` at a time (send a batch in one message so they run in parallel). In Claude Code use the Agent tool with a general-purpose subagent (it needs Read and Bash) and set its `model` to `models.reviewer`.
+Spawn one subagent per entry in `context.lenses`, at most `limits.parallel` at a time (send a batch in one message so they run in parallel). In Claude Code use the Agent tool with a general-purpose subagent (it needs Read and Bash) and set its `model` to `models.reviewer.model` and its `effort` to `models.reviewer.effort` (leave `effort` unset when it is null). In Cursor, `model` already carries the effort (`opus[effort=high]`).
 
 Each subagent gets this prompt, with the placeholders filled in, and nothing else from this conversation:
 
@@ -62,7 +62,7 @@ It merges duplicate findings (same file and category, within 3 lines) and turns 
 
 ## Stage 4: Verify (one subagent per candidate)
 
-Spawn one fresh subagent per candidate id, at most `limits.parallel` at a time (send a batch in one message, wait for it, then the next). In Claude Code use the Agent tool with a general-purpose subagent and set its `model` to `models.verifier`. Never reuse a verifier for a second candidate.
+Spawn one fresh subagent per candidate id, at most `limits.parallel` at a time (send a batch in one message, wait for it, then the next). In Claude Code use the Agent tool with a general-purpose subagent and set its `model` and `effort` from `models.verifier` the same way. Never reuse a verifier for a second candidate.
 
 Each subagent gets this prompt, with the placeholders filled in, and nothing else:
 
@@ -99,4 +99,4 @@ Don't paste the whole report. Offer to walk through specific findings if the use
 
 ## Configuration
 
-`node <skill>/scripts/dist/config.mjs show` prints the effective config (built-in defaults < `~/.config/review-flow/config.json` < `<repo>/review-flow.config.json` < `--set key=value`). Useful keys: `rigor`, `rigorPresets`, `scoring` (weights and `fixBeforeMergeThreshold`), `base`, `ignore` (globs left out of the diff), `specs` (spec documents for the spec lens; auto-detected when absent), `lenses.enabled`, `lenses.custom`. `prepare.mjs` accepts the same `--set key=value` overrides for one run.
+`node <skill>/scripts/dist/config.mjs show` prints the effective config (built-in defaults < `~/.config/review-flow/config.json` < `<repo>/review-flow.config.json` < `--set key=value`). Useful keys: `preset`, `presets` (lenses, limits, and `models.<harness>.<role>.{model,effort}` per preset), `scoring` (weights and `fixBeforeMergeThreshold`), `base`, `ignore` (globs left out of the diff), `specs` (spec documents for the spec lens; auto-detected when absent), `lenses.enabled`, `lenses.custom`. `prepare.mjs` accepts the same `--set key=value` overrides for one run.

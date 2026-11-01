@@ -136,7 +136,10 @@ function issueLines(schema: z.ZodType, input: unknown, label: string): string[] 
 /** Turns `key.path=value` into a nested layer, typing the raw value by the schema node it targets. */
 export function parseSet(arg: string): ConfigLayer {
   const eq = arg.indexOf("=");
-  if (eq <= 0) throw new ConfigError([`--set ${arg}: expected key=value, e.g. --set models.claude.verifier=opus`]);
+  if (eq <= 0)
+    throw new ConfigError([
+      `--set ${arg}: expected key=value, e.g. --set presets.deep.models.claude.verifier.effort=max`,
+    ]);
   const path = arg.slice(0, eq).split(".");
   const raw = arg.slice(eq + 1);
   if (path.some((part) => part === ""))

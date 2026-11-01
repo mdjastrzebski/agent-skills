@@ -1,30 +1,43 @@
 {
-  "rigor": "medium",
-  "models": {
-    "claude": { "reviewer": "sonnet", "merger": "haiku", "verifier": "opus" },
-    "cursor": { "reviewer": "auto", "merger": "auto", "verifier": "auto" }
-  },
+  "preset": "standard",
   "lenses": {
     "enabled": ["correctness", "security", "tests", "performance", "spec"],
     "custom": []
   },
   "checks": {},
-  "rigorPresets": {
-    "low": {
-      "lenses": ["correctness", "security"],
-      "secondCorrectnessPass": false,
-      "allowExecution": false,
-      "maxVerified": 10,
-      "parallel": 3
-    },
-    "medium": {
+  "presets": {
+    "standard": {
+      "models": {
+        "claude": {
+          "reviewer": { "model": "opus", "effort": "medium" },
+          "merger": { "model": "haiku", "effort": null },
+          "verifier": { "model": "opus", "effort": "medium" }
+        },
+        "cursor": {
+          "reviewer": { "model": "auto", "effort": null },
+          "merger": { "model": "auto", "effort": null },
+          "verifier": { "model": "auto", "effort": null }
+        }
+      },
       "lenses": ["correctness", "security", "tests", "performance", "spec"],
       "secondCorrectnessPass": false,
       "allowExecution": true,
       "maxVerified": 25,
       "parallel": 4
     },
-    "high": {
+    "deep": {
+      "models": {
+        "claude": {
+          "reviewer": { "model": "opus", "effort": "high" },
+          "merger": { "model": "haiku", "effort": null },
+          "verifier": { "model": "opus", "effort": "high" }
+        },
+        "cursor": {
+          "reviewer": { "model": "auto", "effort": null },
+          "merger": { "model": "auto", "effort": null },
+          "verifier": { "model": "auto", "effort": null }
+        }
+      },
       "lenses": ["correctness", "security", "tests", "performance", "spec"],
       "secondCorrectnessPass": true,
       "allowExecution": true,

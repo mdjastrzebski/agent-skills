@@ -1,16 +1,21 @@
 import { z } from "zod";
 
 export const BUILTIN_LENSES = ["correctness", "security", "performance", "tests", "spec"] as const;
-export const RIGORS = ["low", "medium", "high"] as const;
+export const PRESETS = ["standard", "deep"] as const;
+export const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
 
 const NonEmpty = z.string().min(1);
 const Weight = z.number().min(0);
 const Lens = z.enum(BUILTIN_LENSES);
 
-const RoleModels = z.strictObject({ reviewer: NonEmpty, merger: NonEmpty, verifier: NonEmpty });
+// null effort = the harness default.
+const RoleModel = z.strictObject({ model: NonEmpty, effort: z.enum(EFFORTS).nullable() });
+const RoleModels = z.strictObject({ reviewer: RoleModel, merger: RoleModel, verifier: RoleModel });
 
-// One row of the §4 rigor table.
-const RigorPreset = z.strictObject({
+// One row of the §4 preset table.
+const Preset = z.strictObject({
+  // Per harness, because model names differ.
+  models: z.strictObject({ claude: RoleModels, cursor: RoleModels }),
   lenses: z.array(Lens),
   secondCorrectnessPass: z.boolean(),
   allowExecution: z.boolean(),
@@ -23,14 +28,13 @@ const Check = NonEmpty.nullable().optional();
 
 /** The effective config: defaults.json must satisfy it on its own, and so must every merge result. */
 export const Config = z.strictObject({
-  rigor: z.enum(RIGORS),
+  preset: z.enum(PRESETS),
   base: NonEmpty.optional(),
   // Spec documents for the spec lens, relative to the repo root. Absent = auto-detect, [] = none.
   specs: z.array(NonEmpty).optional(),
-  models: z.strictObject({ claude: RoleModels, cursor: RoleModels }),
   lenses: z.strictObject({ enabled: z.array(Lens), custom: z.array(NonEmpty) }),
   checks: z.strictObject({ typecheck: Check, test: Check }),
-  rigorPresets: z.strictObject({ low: RigorPreset, medium: RigorPreset, high: RigorPreset }),
+  presets: z.strictObject({ standard: Preset, deep: Preset }),
   scoring: z.strictObject({
     severity: z.strictObject({ critical: Weight, high: Weight, medium: Weight, low: Weight }),
     confidence: z.strictObject({

@@ -1,7 +1,7 @@
 /**
  * Stage 1: create a run directory with `context.json` and `diff.patch` for the reviewers.
  *
- * Usage: node scripts/dist/prepare.mjs [--target current] [--base <ref>] [--rigor low|medium|high]
+ * Usage: node scripts/dist/prepare.mjs [--target current] [--base <ref>] [--preset standard|deep]
  *                                      [--lenses a,b] [--harness claude] [--set key=value]... [--repo <dir>]
  *
  * Only `current` mode exists so far: the working tree (committed, staged, unstaged and untracked changes)
@@ -16,7 +16,7 @@ import { basename, join, resolve } from "node:path";
 import { isEntry } from "./cli.js";
 import { BUILTIN_LENSES } from "./config-schema.js";
 import { ConfigError, loadConfig, skillDir } from "./config.js";
-import { type Context, detectSpecs, fileContext, type Lens } from "./context.js";
+import { type Context, detectSpecs, fileContext, type Lens, type RoleModel } from "./context.js";
 import { detectBase, detectChecks, detectStack } from "./detect.js";
 import { parseDiff } from "./diff.js";
 import { git, GitError, repoRootFrom, tryGit, withPrivateIndex } from "./git.js";
@@ -28,7 +28,7 @@ export type PrepareOptions = {
   repoRoot: string;
   target?: string;
   base?: string;
-  rigor?: string;
+  preset?: string;
   lenses?: string[];
   harness?: string;
   sets?: string[];
@@ -80,7 +80,7 @@ function currentDiff(repoRoot: string, mergeBase: string, ignore: string[]): str
   return patch;
 }
 
-/** The §4 "second correctness pass" at high rigor; not a config lens name, it follows `correctness`. */
+/** The §4 "second correctness pass" in the deep preset; not a config lens name, it follows `correctness`. */
 export const SECOND_CORRECTNESS_LENS = "correctness-alt";
 
 function builtinLens(name: string): Lens {
@@ -93,7 +93,7 @@ function resolveLenses(
   hasSpecs: boolean,
   only: string[] | undefined,
 ): Lens[] {
-  const preset = config.rigorPresets[config.rigor];
+  const preset = config.presets[config.preset];
   const enabled = new Set<string>(config.lenses.enabled);
   const builtin: string[] = preset.lenses.filter((name) => enabled.has(name) && (name !== "spec" || hasSpecs));
   const lenses = builtin.map(builtinLens);
@@ -105,11 +105,23 @@ function resolveLenses(
   const unknown = (only ?? []).filter((name) => !lenses.some((lens) => lens.name === name) && !known.includes(name));
   if (unknown.length) throw new PrepareError(`unknown lens(es): ${unknown.join(", ")}`);
   const chosen = only ? only.map((name) => lenses.find((lens) => lens.name === name) ?? builtinLens(name)) : lenses;
-  // High rigor: a second correctness reviewer with a different seed prompt runs wherever correctness runs.
+  // Deep preset: a second correctness reviewer with a different seed prompt runs wherever correctness runs.
   const index = chosen.findIndex((lens) => lens.name === "correctness");
   if (preset.secondCorrectnessPass && index >= 0 && !chosen.some((lens) => lens.name === SECOND_CORRECTNESS_LENS))
     chosen.splice(index + 1, 0, builtinLens(SECOND_CORRECTNESS_LENS));
   return chosen;
+}
+
+/** Claude Code takes effort as its own subagent parameter; Cursor takes it as a model option. */
+function resolveModels(models: Context["models"], harness: "claude" | "cursor"): Context["models"] {
+  if (harness === "claude") return models;
+  const resolved = { ...models };
+  for (const [role, { model, effort }] of Object.entries(models) as [keyof typeof models, RoleModel][]) {
+    if (effort && model.includes("["))
+      throw new PrepareError(`${role}: set effort in the model id ("${model}") or in effort, not both`);
+    resolved[role] = { model: effort ? `${model}[effort=${effort}]` : model, effort: null };
+  }
+  return resolved;
 }
 
 export function prepare(options: PrepareOptions): { runDir: string; context: Context } {
@@ -124,7 +136,7 @@ function prepareIn(repoRoot: string, options: PrepareOptions): { runDir: string;
     throw new PrepareError(`target "${target}" is not supported yet; only "current" is implemented`);
 
   const sets = [...(options.sets ?? [])];
-  if (options.rigor) sets.push(`rigor=${options.rigor}`);
+  if (options.preset) sets.push(`preset=${options.preset}`);
   const { config } = loadConfig({ repoRoot, sets, userConfigPath: options.userConfigPath });
 
   const headSha = tryGit(repoRoot, ["rev-parse", "--verify", "--quiet", "HEAD^{commit}"]);
@@ -164,7 +176,7 @@ function prepareIn(repoRoot: string, options: PrepareOptions): { runDir: string;
     typecheck: config.checks.typecheck === undefined ? detected.typecheck : config.checks.typecheck,
     test: config.checks.test === undefined ? detected.test : config.checks.test,
   };
-  const preset = config.rigorPresets[config.rigor];
+  const preset = config.presets[config.preset];
   const harness = options.harness ?? "claude";
   if (harness !== "claude" && harness !== "cursor")
     throw new PrepareError(`unknown harness "${harness}" (claude|cursor)`);
@@ -188,9 +200,9 @@ function prepareIn(repoRoot: string, options: PrepareOptions): { runDir: string;
       head_sha: headSha,
       dirty,
     },
-    rigor: config.rigor,
+    preset: config.preset,
     limits: { maxVerified: preset.maxVerified, parallel: preset.parallel, allowExecution: preset.allowExecution },
-    models: config.models[harness],
+    models: resolveModels(preset.models[harness], harness),
     scoring: config.scoring,
     lenses: resolveLenses(repoRoot, config, specs.length > 0, options.lenses),
     specs,
@@ -215,10 +227,10 @@ function prepareIn(repoRoot: string, options: PrepareOptions): { runDir: string;
 // --- CLI -------------------------------------------------------------------
 
 const USAGE =
-  "usage: prepare.mjs [--target current] [--base <ref>] [--rigor low|medium|high] [--lenses a,b]\n" +
+  "usage: prepare.mjs [--target current] [--base <ref>] [--preset standard|deep] [--lenses a,b]\n" +
   "                   [--harness claude|cursor] [--set key=value]... [--repo <dir>]";
 
-const VALUE_FLAGS = ["--target", "--base", "--rigor", "--lenses", "--harness", "--set", "--repo"] as const;
+const VALUE_FLAGS = ["--target", "--base", "--preset", "--lenses", "--harness", "--set", "--repo"] as const;
 
 export function main(argv: string[]): number {
   const values: Record<string, string> = {};
@@ -249,7 +261,7 @@ export function main(argv: string[]): number {
       repoRoot,
       target: values["--target"],
       base: values["--base"],
-      rigor: values["--rigor"],
+      preset: values["--preset"],
       lenses: values["--lenses"]
         ?.split(",")
         .map((s) => s.trim())
@@ -262,7 +274,7 @@ export function main(argv: string[]): number {
       `target: current (${t.branch ?? "detached"} @ ${t.head_sha.slice(0, 12)}${t.dirty ? ", dirty" : ""}) vs ${t.base_ref} (merge-base ${t.merge_base.slice(0, 12)})`,
     );
     console.log(
-      `files: ${context.files.length} · rigor: ${context.rigor} · lenses: ${context.lenses.map((l) => l.name).join(", ")}`,
+      `files: ${context.files.length} · preset: ${context.preset} · lenses: ${context.lenses.map((l) => l.name).join(", ")}`,
     );
     console.log(runDir);
     return 0;

@@ -1,6 +1,6 @@
 ### correctness-alt
 
-A second, independent correctness pass (high rigor). Another reviewer already reads the change hunk by hunk; you approach it from the outside in, to catch what that reading misses.
+A second, independent correctness pass (deep preset). Another reviewer already reads the change hunk by hunk; you approach it from the outside in, to catch what that reading misses.
 
 Work like this:
 - **Start from the callers.** For each changed function, type or export, find who uses it (through `imports`, the diff, and the files that import the changed file) and check that every caller still gets what it relies on: argument order, return shape, thrown vs. returned errors, side effects, timing.

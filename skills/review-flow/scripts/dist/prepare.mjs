@@ -3049,20 +3049,31 @@ const BUILTIN_LENSES = [
 	"tests",
 	"spec"
 ];
-const RIGORS = [
+const PRESETS = ["standard", "deep"];
+const EFFORTS = [
 	"low",
 	"medium",
-	"high"
+	"high",
+	"xhigh",
+	"max"
 ];
 const NonEmpty = string().min(1);
 const Weight = number().min(0);
 const Lens = _enum(BUILTIN_LENSES);
-const RoleModels = strictObject({
-	reviewer: NonEmpty,
-	merger: NonEmpty,
-	verifier: NonEmpty
+const RoleModel = strictObject({
+	model: NonEmpty,
+	effort: _enum(EFFORTS).nullable()
 });
-const RigorPreset = strictObject({
+const RoleModels = strictObject({
+	reviewer: RoleModel,
+	merger: RoleModel,
+	verifier: RoleModel
+});
+const Preset = strictObject({
+	models: strictObject({
+		claude: RoleModels,
+		cursor: RoleModels
+	}),
 	lenses: array(Lens),
 	secondCorrectnessPass: boolean(),
 	allowExecution: boolean(),
@@ -3072,13 +3083,9 @@ const RigorPreset = strictObject({
 const Check = NonEmpty.nullable().optional();
 /** The effective config: defaults.json must satisfy it on its own, and so must every merge result. */
 const Config = strictObject({
-	rigor: _enum(RIGORS),
+	preset: _enum(PRESETS),
 	base: NonEmpty.optional(),
 	specs: array(NonEmpty).optional(),
-	models: strictObject({
-		claude: RoleModels,
-		cursor: RoleModels
-	}),
 	lenses: strictObject({
 		enabled: array(Lens),
 		custom: array(NonEmpty)
@@ -3087,10 +3094,9 @@ const Config = strictObject({
 		typecheck: Check,
 		test: Check
 	}),
-	rigorPresets: strictObject({
-		low: RigorPreset,
-		medium: RigorPreset,
-		high: RigorPreset
+	presets: strictObject({
+		standard: Preset,
+		deep: Preset
 	}),
 	scoring: strictObject({
 		severity: strictObject({
@@ -3385,7 +3391,7 @@ function issueLines(schema, input, label) {
 /** Turns `key.path=value` into a nested layer, typing the raw value by the schema node it targets. */
 function parseSet(arg) {
 	const eq = arg.indexOf("=");
-	if (eq <= 0) throw new ConfigError([`--set ${arg}: expected key=value, e.g. --set models.claude.verifier=opus`]);
+	if (eq <= 0) throw new ConfigError([`--set ${arg}: expected key=value, e.g. --set presets.deep.models.claude.verifier.effort=max`]);
 	const path = arg.slice(0, eq).split(".");
 	const raw = arg.slice(eq + 1);
 	if (path.some((part) => part === "")) throw new ConfigError([`--set ${arg}: empty segment in key "${arg.slice(0, eq)}"`]);
@@ -3923,7 +3929,7 @@ function appendTrace(runDir, entry) {
 /**
 * Stage 1: create a run directory with `context.json` and `diff.patch` for the reviewers.
 *
-* Usage: node scripts/dist/prepare.mjs [--target current] [--base <ref>] [--rigor low|medium|high]
+* Usage: node scripts/dist/prepare.mjs [--target current] [--base <ref>] [--preset standard|deep]
 *                                      [--lenses a,b] [--harness claude] [--set key=value]... [--repo <dir>]
 *
 * Only `current` mode exists so far: the working tree (committed, staged, unstaged and untracked changes)
@@ -3997,7 +4003,7 @@ function currentDiff(repoRoot, mergeBase, ignore) {
 	], [0, 1]);
 	return patch;
 }
-/** The §4 "second correctness pass" at high rigor; not a config lens name, it follows `correctness`. */
+/** The §4 "second correctness pass" in the deep preset; not a config lens name, it follows `correctness`. */
 const SECOND_CORRECTNESS_LENS = "correctness-alt";
 function builtinLens(name) {
 	return {
@@ -4007,7 +4013,7 @@ function builtinLens(name) {
 	};
 }
 function resolveLenses(repoRoot, config, hasSpecs, only) {
-	const preset = config.rigorPresets[config.rigor];
+	const preset = config.presets[config.preset];
 	const enabled = new Set(config.lenses.enabled);
 	const lenses = preset.lenses.filter((name) => enabled.has(name) && (name !== "spec" || hasSpecs)).map(builtinLens);
 	for (const path of config.lenses.custom) {
@@ -4026,6 +4032,19 @@ function resolveLenses(repoRoot, config, hasSpecs, only) {
 	if (preset.secondCorrectnessPass && index >= 0 && !chosen.some((lens) => lens.name === "correctness-alt")) chosen.splice(index + 1, 0, builtinLens(SECOND_CORRECTNESS_LENS));
 	return chosen;
 }
+/** Claude Code takes effort as its own subagent parameter; Cursor takes it as a model option. */
+function resolveModels(models, harness) {
+	if (harness === "claude") return models;
+	const resolved = { ...models };
+	for (const [role, { model, effort }] of Object.entries(models)) {
+		if (effort && model.includes("[")) throw new PrepareError(`${role}: set effort in the model id ("${model}") or in effort, not both`);
+		resolved[role] = {
+			model: effort ? `${model}[effort=${effort}]` : model,
+			effort: null
+		};
+	}
+	return resolved;
+}
 function prepare(options) {
 	const repoRoot = realpathSync(options.repoRoot);
 	return withPrivateIndex(repoRoot, () => prepareIn(repoRoot, options));
@@ -4035,7 +4054,7 @@ function prepareIn(repoRoot, options) {
 	const target = options.target ?? "current";
 	if (target !== "current") throw new PrepareError(`target "${target}" is not supported yet; only "current" is implemented`);
 	const sets = [...options.sets ?? []];
-	if (options.rigor) sets.push(`rigor=${options.rigor}`);
+	if (options.preset) sets.push(`preset=${options.preset}`);
 	const { config } = loadConfig({
 		repoRoot,
 		sets,
@@ -4078,7 +4097,7 @@ function prepareIn(repoRoot, options) {
 		typecheck: config.checks.typecheck === void 0 ? detected.typecheck : config.checks.typecheck,
 		test: config.checks.test === void 0 ? detected.test : config.checks.test
 	};
-	const preset = config.rigorPresets[config.rigor];
+	const preset = config.presets[config.preset];
 	const harness = options.harness ?? "claude";
 	if (harness !== "claude" && harness !== "cursor") throw new PrepareError(`unknown harness "${harness}" (claude|cursor)`);
 	const runDir = createRunDir(repoRoot, "current", startedAt);
@@ -4105,13 +4124,13 @@ function prepareIn(repoRoot, options) {
 			head_sha: headSha,
 			dirty
 		},
-		rigor: config.rigor,
+		preset: config.preset,
 		limits: {
 			maxVerified: preset.maxVerified,
 			parallel: preset.parallel,
 			allowExecution: preset.allowExecution
 		},
-		models: config.models[harness],
+		models: resolveModels(preset.models[harness], harness),
 		scoring: config.scoring,
 		lenses: resolveLenses(repoRoot, config, specs.length > 0, options.lenses),
 		specs,
@@ -4135,11 +4154,11 @@ function prepareIn(repoRoot, options) {
 		context
 	};
 }
-const USAGE = "usage: prepare.mjs [--target current] [--base <ref>] [--rigor low|medium|high] [--lenses a,b]\n                   [--harness claude|cursor] [--set key=value]... [--repo <dir>]";
+const USAGE = "usage: prepare.mjs [--target current] [--base <ref>] [--preset standard|deep] [--lenses a,b]\n                   [--harness claude|cursor] [--set key=value]... [--repo <dir>]";
 const VALUE_FLAGS = [
 	"--target",
 	"--base",
-	"--rigor",
+	"--preset",
 	"--lenses",
 	"--harness",
 	"--set",
@@ -4173,14 +4192,14 @@ function main(argv) {
 			repoRoot,
 			target: values["--target"],
 			base: values["--base"],
-			rigor: values["--rigor"],
+			preset: values["--preset"],
 			lenses: values["--lenses"]?.split(",").map((s) => s.trim()).filter(Boolean),
 			harness: values["--harness"],
 			sets
 		});
 		const t = context.target;
 		console.log(`target: current (${t.branch ?? "detached"} @ ${t.head_sha.slice(0, 12)}${t.dirty ? ", dirty" : ""}) vs ${t.base_ref} (merge-base ${t.merge_base.slice(0, 12)})`);
-		console.log(`files: ${context.files.length} · rigor: ${context.rigor} · lenses: ${context.lenses.map((l) => l.name).join(", ")}`);
+		console.log(`files: ${context.files.length} · preset: ${context.preset} · lenses: ${context.lenses.map((l) => l.name).join(", ")}`);
 		console.log(runDir);
 		return 0;
 	} catch (error) {

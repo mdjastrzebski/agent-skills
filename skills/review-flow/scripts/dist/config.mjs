@@ -3049,20 +3049,31 @@ const BUILTIN_LENSES = [
 	"tests",
 	"spec"
 ];
-const RIGORS = [
+const PRESETS = ["standard", "deep"];
+const EFFORTS = [
 	"low",
 	"medium",
-	"high"
+	"high",
+	"xhigh",
+	"max"
 ];
 const NonEmpty = string().min(1);
 const Weight = number().min(0);
 const Lens = _enum(BUILTIN_LENSES);
-const RoleModels = strictObject({
-	reviewer: NonEmpty,
-	merger: NonEmpty,
-	verifier: NonEmpty
+const RoleModel = strictObject({
+	model: NonEmpty,
+	effort: _enum(EFFORTS).nullable()
 });
-const RigorPreset = strictObject({
+const RoleModels = strictObject({
+	reviewer: RoleModel,
+	merger: RoleModel,
+	verifier: RoleModel
+});
+const Preset = strictObject({
+	models: strictObject({
+		claude: RoleModels,
+		cursor: RoleModels
+	}),
 	lenses: array(Lens),
 	secondCorrectnessPass: boolean(),
 	allowExecution: boolean(),
@@ -3072,13 +3083,9 @@ const RigorPreset = strictObject({
 const Check = NonEmpty.nullable().optional();
 /** The effective config: defaults.json must satisfy it on its own, and so must every merge result. */
 const Config = strictObject({
-	rigor: _enum(RIGORS),
+	preset: _enum(PRESETS),
 	base: NonEmpty.optional(),
 	specs: array(NonEmpty).optional(),
-	models: strictObject({
-		claude: RoleModels,
-		cursor: RoleModels
-	}),
 	lenses: strictObject({
 		enabled: array(Lens),
 		custom: array(NonEmpty)
@@ -3087,10 +3094,9 @@ const Config = strictObject({
 		typecheck: Check,
 		test: Check
 	}),
-	rigorPresets: strictObject({
-		low: RigorPreset,
-		medium: RigorPreset,
-		high: RigorPreset
+	presets: strictObject({
+		standard: Preset,
+		deep: Preset
 	}),
 	scoring: strictObject({
 		severity: strictObject({
@@ -3385,7 +3391,7 @@ function issueLines(schema, input, label) {
 /** Turns `key.path=value` into a nested layer, typing the raw value by the schema node it targets. */
 function parseSet(arg) {
 	const eq = arg.indexOf("=");
-	if (eq <= 0) throw new ConfigError([`--set ${arg}: expected key=value, e.g. --set models.claude.verifier=opus`]);
+	if (eq <= 0) throw new ConfigError([`--set ${arg}: expected key=value, e.g. --set presets.deep.models.claude.verifier.effort=max`]);
 	const path = arg.slice(0, eq).split(".");
 	const raw = arg.slice(eq + 1);
 	if (path.some((part) => part === "")) throw new ConfigError([`--set ${arg}: empty segment in key "${arg.slice(0, eq)}"`]);

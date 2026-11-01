@@ -114,15 +114,19 @@ describe("prepare (current mode)", () => {
 
   it("writes context.json with stack, checks, lenses, limits and models from the config", () => {
     const root = repo();
-    const { runDir, context } = run(root, { rigor: "low" });
+    const { runDir, context } = run(root, { preset: "standard" });
     expect(JSON.parse(readFileSync(join(runDir, "context.json"), "utf8"))).toEqual(context);
-    expect(context.rigor).toBe("low");
-    expect(context.limits).toEqual({ maxVerified: 10, parallel: 3, allowExecution: false });
-    expect(context.lenses.map((l) => l.name)).toEqual(["correctness", "security"]);
+    expect(context.preset).toBe("standard");
+    expect(context.limits).toEqual({ maxVerified: 25, parallel: 4, allowExecution: true });
+    expect(context.lenses.map((l) => l.name)).toEqual(["correctness", "security", "tests", "performance"]);
     expect(context.specs).toEqual([]);
     expect(context.lenses[0].output).toBe("findings/correctness.json");
     expect(existsSync(context.lenses[0].prompt)).toBe(true);
-    expect(context.models).toEqual({ reviewer: "sonnet", merger: "haiku", verifier: "opus" });
+    expect(context.models).toEqual({
+      reviewer: { model: "opus", effort: "medium" },
+      merger: { model: "haiku", effort: null },
+      verifier: { model: "opus", effort: "medium" },
+    });
     expect(context.stack).toMatchObject({ typescript: true, testRunner: "vitest" });
     expect(context.checks).toEqual({ typecheck: "npx tsc --noEmit", test: "npx vitest related --run" });
     expect(existsSync(join(runDir, "findings"))).toBe(true);
@@ -150,24 +154,26 @@ describe("prepare (current mode)", () => {
     expect(() => run(root, { lenses: ["style"] })).toThrow(/unknown lens/);
   });
 
-  it("adds the second correctness pass at high rigor, right after correctness, and records the weights", () => {
+  it("adds the second correctness pass in the deep preset, right after correctness, and records the weights", () => {
     const root = repo();
-    const high = run(root, { rigor: "high" }).context;
-    expect(high.lenses.map((l) => l.name)).toEqual([
+    const deep = run(root, { preset: "deep" }).context;
+    expect(deep.lenses.map((l) => l.name)).toEqual([
       "correctness",
       "correctness-alt",
       "security",
       "tests",
       "performance",
     ]);
-    expect(existsSync(high.lenses[1].prompt)).toBe(true);
-    expect(high.limits).toEqual({ maxVerified: 50, parallel: 6, allowExecution: true });
-    expect(high.scoring.fixBeforeMergeThreshold).toBe(5);
-    expect(run(root, { rigor: "high", lenses: ["correctness"] }).context.lenses.map((l) => l.name)).toEqual([
+    expect(existsSync(deep.lenses[1].prompt)).toBe(true);
+    expect(deep.limits).toEqual({ maxVerified: 50, parallel: 6, allowExecution: true });
+    expect(deep.models.reviewer).toEqual({ model: "opus", effort: "high" });
+    expect(deep.models.verifier).toEqual({ model: "opus", effort: "high" });
+    expect(deep.scoring.fixBeforeMergeThreshold).toBe(5);
+    expect(run(root, { preset: "deep", lenses: ["correctness"] }).context.lenses.map((l) => l.name)).toEqual([
       "correctness",
       "correctness-alt",
     ]);
-    expect(run(root, { rigor: "high", lenses: ["tests"] }).context.lenses.map((l) => l.name)).toEqual(["tests"]);
+    expect(run(root, { preset: "deep", lenses: ["tests"] }).context.lenses.map((l) => l.name)).toEqual(["tests"]);
     expect(run(root, { lenses: ["correctness-alt"] }).context.lenses.map((l) => l.name)).toEqual(["correctness-alt"]);
     expect(run(root, { sets: ["scoring.fixBeforeMergeThreshold=3"] }).context.scoring.fixBeforeMergeThreshold).toBe(3);
   });
@@ -204,12 +210,24 @@ describe("prepare (current mode)", () => {
     expect(only.lenses.map((l) => l.name)).toEqual(["style"]);
   });
 
-  it("picks models for the harness and rejects unknown harnesses", () => {
+  it("picks models for the harness, folds effort into Cursor model ids, and rejects unknown harnesses", () => {
     const root = repo();
     expect(run(root, { harness: "cursor" }).context).toMatchObject({
       harness: "cursor",
-      models: { reviewer: "auto", merger: "auto", verifier: "auto" },
+      models: {
+        reviewer: { model: "auto", effort: null },
+        merger: { model: "auto", effort: null },
+        verifier: { model: "auto", effort: null },
+      },
     });
+    const cursor = "presets.standard.models.cursor.verifier";
+    const sets = [`${cursor}.model=claude-opus-5`, `${cursor}.effort=high`];
+    expect(run(root, { harness: "cursor", sets }).context.models.verifier).toEqual({
+      model: "claude-opus-5[effort=high]",
+      effort: null,
+    });
+    const both = [`${cursor}.model=claude-opus-5[effort=low]`, `${cursor}.effort=high`];
+    expect(() => run(root, { harness: "cursor", sets: both })).toThrow(/not both/);
     expect(() => run(root, { harness: "vim" })).toThrow(/unknown harness/);
   });
 
@@ -368,13 +386,15 @@ describe("dist/prepare.mjs CLI", () => {
   it("prints the run directory as the last line", () => {
     const root = repo();
     const env = { ...process.env, XDG_CONFIG_HOME: mkdtempSync(join(tmpdir(), "review-flow-xdg-")) };
-    const result = spawnSync(process.execPath, [cli, "--rigor", "low"], { cwd: root, env, encoding: "utf8" });
+    const result = spawnSync(process.execPath, [cli, "--preset", "deep"], { cwd: root, env, encoding: "utf8" });
     expect(result.status, result.stderr).toBe(0);
     // Bundled-in CLI modules (config.ts) must not run their own main.
     expect(result.stderr).toBe("");
     const lines = result.stdout.trim().split("\n");
     expect(lines.at(-1)).toMatch(new RegExp(`^${root}/\\.review-flow/runs/current-\\d{8}-\\d{6}$`));
-    expect(existsSync(join(lines.at(-1)!, "context.json"))).toBe(true);
+    const context = JSON.parse(readFileSync(join(lines.at(-1)!, "context.json"), "utf8"));
+    expect(context.preset).toBe("deep");
+    expect(context.lenses.map((lens: { name: string }) => lens.name)).toContain("correctness-alt");
   });
 
   it("exits 1 with a message on errors and 2 on usage errors", () => {

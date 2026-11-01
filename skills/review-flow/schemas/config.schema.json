@@ -5,12 +5,11 @@
     "$schema": {
       "type": "string"
     },
-    "rigor": {
+    "preset": {
       "type": "string",
       "enum": [
-        "low",
-        "medium",
-        "high"
+        "standard",
+        "deep"
       ]
     },
     "base": {
@@ -23,48 +22,6 @@
         "type": "string",
         "minLength": 1
       }
-    },
-    "models": {
-      "type": "object",
-      "properties": {
-        "claude": {
-          "type": "object",
-          "properties": {
-            "reviewer": {
-              "type": "string",
-              "minLength": 1
-            },
-            "merger": {
-              "type": "string",
-              "minLength": 1
-            },
-            "verifier": {
-              "type": "string",
-              "minLength": 1
-            }
-          },
-          "additionalProperties": false
-        },
-        "cursor": {
-          "type": "object",
-          "properties": {
-            "reviewer": {
-              "type": "string",
-              "minLength": 1
-            },
-            "merger": {
-              "type": "string",
-              "minLength": 1
-            },
-            "verifier": {
-              "type": "string",
-              "minLength": 1
-            }
-          },
-          "additionalProperties": false
-        }
-      },
-      "additionalProperties": false
     },
     "lenses": {
       "type": "object",
@@ -120,12 +77,192 @@
       },
       "additionalProperties": false
     },
-    "rigorPresets": {
+    "presets": {
       "type": "object",
       "properties": {
-        "low": {
+        "standard": {
           "type": "object",
           "properties": {
+            "models": {
+              "type": "object",
+              "properties": {
+                "claude": {
+                  "type": "object",
+                  "properties": {
+                    "reviewer": {
+                      "type": "object",
+                      "properties": {
+                        "model": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "effort": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "low",
+                                "medium",
+                                "high",
+                                "xhigh",
+                                "max"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "merger": {
+                      "type": "object",
+                      "properties": {
+                        "model": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "effort": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "low",
+                                "medium",
+                                "high",
+                                "xhigh",
+                                "max"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "verifier": {
+                      "type": "object",
+                      "properties": {
+                        "model": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "effort": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "low",
+                                "medium",
+                                "high",
+                                "xhigh",
+                                "max"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "cursor": {
+                  "type": "object",
+                  "properties": {
+                    "reviewer": {
+                      "type": "object",
+                      "properties": {
+                        "model": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "effort": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "low",
+                                "medium",
+                                "high",
+                                "xhigh",
+                                "max"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "merger": {
+                      "type": "object",
+                      "properties": {
+                        "model": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "effort": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "low",
+                                "medium",
+                                "high",
+                                "xhigh",
+                                "max"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "verifier": {
+                      "type": "object",
+                      "properties": {
+                        "model": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "effort": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "low",
+                                "medium",
+                                "high",
+                                "xhigh",
+                                "max"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
             "lenses": {
               "type": "array",
               "items": {
@@ -158,44 +295,189 @@
           },
           "additionalProperties": false
         },
-        "medium": {
+        "deep": {
           "type": "object",
           "properties": {
-            "lenses": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "enum": [
-                  "correctness",
-                  "security",
-                  "performance",
-                  "tests",
-                  "spec"
-                ]
-              }
+            "models": {
+              "type": "object",
+              "properties": {
+                "claude": {
+                  "type": "object",
+                  "properties": {
+                    "reviewer": {
+                      "type": "object",
+                      "properties": {
+                        "model": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "effort": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "low",
+                                "medium",
+                                "high",
+                                "xhigh",
+                                "max"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "merger": {
+                      "type": "object",
+                      "properties": {
+                        "model": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "effort": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "low",
+                                "medium",
+                                "high",
+                                "xhigh",
+                                "max"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "verifier": {
+                      "type": "object",
+                      "properties": {
+                        "model": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "effort": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "low",
+                                "medium",
+                                "high",
+                                "xhigh",
+                                "max"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "cursor": {
+                  "type": "object",
+                  "properties": {
+                    "reviewer": {
+                      "type": "object",
+                      "properties": {
+                        "model": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "effort": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "low",
+                                "medium",
+                                "high",
+                                "xhigh",
+                                "max"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "merger": {
+                      "type": "object",
+                      "properties": {
+                        "model": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "effort": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "low",
+                                "medium",
+                                "high",
+                                "xhigh",
+                                "max"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "verifier": {
+                      "type": "object",
+                      "properties": {
+                        "model": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "effort": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "low",
+                                "medium",
+                                "high",
+                                "xhigh",
+                                "max"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
             },
-            "secondCorrectnessPass": {
-              "type": "boolean"
-            },
-            "allowExecution": {
-              "type": "boolean"
-            },
-            "maxVerified": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 9007199254740991
-            },
-            "parallel": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 9007199254740991
-            }
-          },
-          "additionalProperties": false
-        },
-        "high": {
-          "type": "object",
-          "properties": {
             "lenses": {
               "type": "array",
               "items": {

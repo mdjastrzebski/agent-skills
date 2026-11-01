@@ -56,15 +56,14 @@ describe("defaults.json", () => {
     expect(Config.safeParse(defaults).success).toBe(true);
   });
 
-  it("matches the §4 rigor table", () => {
-    const { low, medium, high } = defaults.rigorPresets;
-    expect([low.maxVerified, medium.maxVerified, high.maxVerified]).toEqual([10, 25, 50]);
-    expect([low.parallel, medium.parallel, high.parallel]).toEqual([3, 4, 6]);
-    expect([low.allowExecution, medium.allowExecution, high.allowExecution]).toEqual([false, true, true]);
-    expect(low.lenses).toEqual(["correctness", "security"]);
-    expect(medium.lenses).toEqual(["correctness", "security", "tests", "performance", "spec"]);
-    expect(high.lenses).toContain("spec");
-    expect(high.secondCorrectnessPass).toBe(true);
+  it("matches the §4 preset table", () => {
+    const { standard, deep } = defaults.presets;
+    expect([standard.maxVerified, deep.maxVerified]).toEqual([25, 50]);
+    expect([standard.parallel, deep.parallel]).toEqual([4, 6]);
+    expect([standard.allowExecution, deep.allowExecution]).toEqual([true, true]);
+    expect(standard.lenses).toEqual(["correctness", "security", "tests", "performance", "spec"]);
+    expect(deep.lenses).toEqual(standard.lenses);
+    expect([standard.secondCorrectnessPass, deep.secondCorrectnessPass]).toEqual([false, true]);
   });
 
   it("matches the §8 scoring weights", () => {
@@ -93,24 +92,36 @@ describe("loadConfig precedence", () => {
 
   it("applies default < user < repo < override, tracking the source of each value", () => {
     const options = setup({
-      user: { rigor: "low", models: { claude: { verifier: "sonnet", reviewer: "haiku" } } },
-      repo: { rigor: "high", models: { claude: { verifier: "opus-repo" } } },
+      user: {
+        preset: "deep",
+        presets: {
+          deep: { models: { claude: { verifier: { model: "sonnet" }, reviewer: { model: "haiku", effort: "low" } } } },
+        },
+      },
+      repo: { preset: "standard", presets: { deep: { models: { claude: { verifier: { model: "opus-repo" } } } } } },
     });
-    const { config, sources } = loadConfig({ ...options, sets: ["models.claude.verifier=opus-override"] });
-    expect(config.rigor).toBe("high");
-    expect(config.models.claude).toEqual({ reviewer: "haiku", merger: "haiku", verifier: "opus-override" });
+    const sets = ["presets.deep.models.claude.verifier.model=opus-override"];
+    const { config, sources } = loadConfig({ ...options, sets });
+    expect(config.preset).toBe("standard");
+    expect(config.presets.deep.models.claude).toEqual({
+      reviewer: { model: "haiku", effort: "low" },
+      merger: { model: "haiku", effort: null },
+      verifier: { model: "opus-override", effort: "high" },
+    });
     expect(sources).toMatchObject({
-      rigor: "repo",
-      "models.claude.reviewer": "user",
-      "models.claude.merger": "default",
-      "models.claude.verifier": "override",
+      preset: "repo",
+      "presets.deep.models.claude.reviewer.model": "user",
+      "presets.deep.models.claude.reviewer.effort": "user",
+      "presets.deep.models.claude.merger.model": "default",
+      "presets.deep.models.claude.verifier.model": "override",
+      "presets.deep.models.claude.verifier.effort": "default",
     });
   });
 
   it("deep-merges objects but replaces arrays", () => {
-    const options = setup({ repo: { rigorPresets: { high: { maxVerified: 80 } }, lenses: { enabled: ["security"] } } });
+    const options = setup({ repo: { presets: { deep: { maxVerified: 80 } }, lenses: { enabled: ["security"] } } });
     const { config } = loadConfig(options);
-    expect(config.rigorPresets.high).toMatchObject({ maxVerified: 80, parallel: 6, allowExecution: true });
+    expect(config.presets.deep).toMatchObject({ maxVerified: 80, parallel: 6, allowExecution: true });
     expect(config.lenses).toEqual({ enabled: ["security"], custom: [] });
   });
 
@@ -133,24 +144,26 @@ describe("loadConfig precedence", () => {
 
 describe("config errors", () => {
   it("rejects unknown keys at any depth, naming the file and suggesting the closest key", () => {
-    const options = setup({ repo: { rigr: "high", models: { claude: { verifer: "opus" } } } });
+    const options = setup({ repo: { prest: "deep", presets: { deep: { models: { claude: { verifer: {} } } } } } });
     const errors = errorsOf(() => loadConfig(options));
     const file = join(options.repoRoot, "review-flow.config.json");
-    expect(errors).toContain(`${file}: rigr: unknown key (did you mean "rigor"?)`);
-    expect(errors).toContain(`${file}: models.claude.verifer: unknown key (did you mean "verifier"?)`);
+    expect(errors).toContain(`${file}: prest: unknown key (did you mean "preset"?)`);
+    expect(errors).toContain(`${file}: presets.deep.models.claude.verifer: unknown key (did you mean "verifier"?)`);
   });
 
   it("lists valid keys when nothing is close", () => {
-    const errors = errorsOf(() => loadConfig(setup({ user: { models: { codex: {} } } })));
-    expect(errors[0]).toMatch(/models\.codex: unknown key \(valid keys: claude, cursor\)$/);
+    const errors = errorsOf(() => loadConfig(setup({ user: { presets: { standard: { models: { codex: {} } } } } })));
+    expect(errors[0]).toMatch(/presets\.standard\.models\.codex: unknown key \(valid keys: claude, cursor\)$/);
   });
 
   it("reports invalid values and unparseable files", () => {
-    const errors = errorsOf(() => loadConfig(setup({ user: { rigor: "extreme" }, repo: "{ nope" })));
-    expect(errors.some((e) => e.includes('rigor: expected one of "low" | "medium" | "high", got "extreme"'))).toBe(
-      true,
-    );
+    const errors = errorsOf(() => loadConfig(setup({ user: { preset: "extreme" }, repo: "{ nope" })));
+    expect(errors.some((e) => e.includes('preset: expected one of "standard" | "deep", got "extreme"'))).toBe(true);
     expect(errors.some((e) => /review-flow\.config\.json: cannot parse:/.test(e))).toBe(true);
+    const effort = { presets: { deep: { models: { claude: { verifier: { effort: "huge" } } } } } };
+    expect(errorsOf(() => loadConfig(setup({ repo: effort })))[0]).toMatch(
+      /presets\.deep\.models\.claude\.verifier\.effort: expected one of "low" \| "medium" \| "high" \| "xhigh" \| "max"/,
+    );
   });
 
   it("rejects unknown lens names", () => {
@@ -160,11 +173,11 @@ describe("config errors", () => {
 
   it("reports bad --set overrides", () => {
     const options = setup();
-    expect(errorsOf(() => loadConfig({ ...options, sets: ["rigr=high"] }))).toEqual([
-      '--set rigr=high: rigr: unknown key (did you mean "rigor"?)',
+    expect(errorsOf(() => loadConfig({ ...options, sets: ["prest=deep"] }))).toEqual([
+      '--set prest=deep: prest: unknown key (did you mean "preset"?)',
     ]);
-    expect(errorsOf(() => loadConfig({ ...options, sets: ["rigor"] }))[0]).toMatch(/expected key=value/);
-    expect(errorsOf(() => loadConfig({ ...options, sets: ["rigorPresets.high.maxVerified=lots"] }))[0]).toMatch(
+    expect(errorsOf(() => loadConfig({ ...options, sets: ["preset"] }))[0]).toMatch(/expected key=value/);
+    expect(errorsOf(() => loadConfig({ ...options, sets: ["presets.deep.maxVerified=lots"] }))[0]).toMatch(
       /expected number/,
     );
   });
@@ -172,9 +185,13 @@ describe("config errors", () => {
 
 describe("parseSet", () => {
   it.each([
-    ["rigor=high", { rigor: "high" }],
+    ["preset=deep", { preset: "deep" }],
+    [
+      "presets.deep.models.claude.merger.effort=null",
+      { presets: { deep: { models: { claude: { merger: { effort: null } } } } } },
+    ],
     ["base=123", { base: "123" }],
-    ["rigorPresets.high.maxVerified=80", { rigorPresets: { high: { maxVerified: 80 } } }],
+    ["presets.deep.maxVerified=80", { presets: { deep: { maxVerified: 80 } } }],
     ["publish.includeFollowUps=false", { publish: { includeFollowUps: false } }],
     ["lenses.enabled=correctness, security", { lenses: { enabled: ["correctness", "security"] } }],
     ['lenses.custom=["./a.md"]', { lenses: { custom: ["./a.md"] } }],
@@ -202,8 +219,8 @@ describe("parseJsonc", () => {
 describe("closestKey", () => {
   it("suggests only reasonably close keys", () => {
     expect(closestKey("verifer", ["reviewer", "merger", "verifier"])).toBe("verifier");
-    expect(closestKey("Rigor", ["rigor", "base"])).toBe("rigor");
-    expect(closestKey("zzzzzz", ["rigor", "base"])).toBeUndefined();
+    expect(closestKey("Preset", ["preset", "base"])).toBe("preset");
+    expect(closestKey("zzzzzz", ["preset", "base"])).toBeUndefined();
   });
 });
 
@@ -218,13 +235,13 @@ describe("init", () => {
   it("activates only detected values that differ from defaults; the rest is commented out", () => {
     const text = renderInit(
       loadDefaults(),
-      { base: "develop", checks: { test: "yarn jest" }, rigor: "medium" },
+      { base: "develop", checks: { test: "yarn jest" }, preset: "standard" },
       "./s.json",
     );
     const parsed = parseJsonc(text);
     expect(parsed).toEqual({ base: "develop", checks: { test: "yarn jest" }, $schema: "./s.json" });
-    expect(text).toContain('  // "rigor": "medium",');
-    expect(text).toContain('  // "models": {');
+    expect(text).toContain('  // "preset": "standard",');
+    expect(text).toContain('  // "presets": {');
   });
 
   it("stays valid when any commented top-level key is uncommented", () => {
@@ -277,22 +294,25 @@ describe("dist/config.mjs CLI", () => {
 
   it("show prints values with their sources", () => {
     const repo = gitRepo();
-    writeFileSync(join(repo, "review-flow.config.json"), '{ "rigor": "high" }');
-    const result = run(repo, "show", "--set", "models.cursor.verifier=gpt-5");
+    writeFileSync(join(repo, "review-flow.config.json"), '{ "preset": "deep" }');
+    const result = run(repo, "show", "--set", "presets.deep.models.cursor.verifier.model=gpt-5");
     expect(result.status, result.stderr).toBe(0);
-    expect(result.stdout).toMatch(/rigor\s+= "high"\s+\[repo\]/);
-    expect(result.stdout).toMatch(/models\.cursor\.verifier\s+= "gpt-5"\s+\[override\]/);
-    expect(result.stdout).toMatch(/models\.claude\.verifier\s+= "opus"\s+\[default\]/);
+    expect(result.stdout).toMatch(/preset\s+= "deep"\s+\[repo\]/);
+    expect(result.stdout).toMatch(/presets\.deep\.models\.cursor\.verifier\.model\s+= "gpt-5"\s+\[override\]/);
+    expect(result.stdout).toMatch(/presets\.deep\.models\.claude\.verifier\.effort\s+= "high"\s+\[default\]/);
     expect(result.stdout).toMatch(/base\s+= \(auto-detect\)/);
   });
 
   it("show --json includes the user file from XDG_CONFIG_HOME", () => {
     mkdirSync(join(home, "review-flow"), { recursive: true });
-    writeFileSync(join(home, "review-flow/config.json"), '{ "models": { "claude": { "reviewer": "opus" } } }');
+    writeFileSync(
+      join(home, "review-flow/config.json"),
+      '{ "presets": { "deep": { "models": { "claude": { "reviewer": { "effort": "max" } } } } } }',
+    );
     const result = run(gitRepo(), "show", "--json");
     const loaded = JSON.parse(result.stdout);
-    expect(loaded.config.models.claude.reviewer).toBe("opus");
-    expect(loaded.sources["models.claude.reviewer"]).toBe("user");
+    expect(loaded.config.presets.deep.models.claude.reviewer).toEqual({ model: "opus", effort: "max" });
+    expect(loaded.sources["presets.deep.models.claude.reviewer.effort"]).toBe("user");
   });
 
   it("exits 1 with suggestions for unknown keys", () => {
