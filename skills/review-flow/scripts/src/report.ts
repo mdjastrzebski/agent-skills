@@ -14,7 +14,7 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { isEntry } from "./cli.js";
-import { type Context, readContext } from "./context.js";
+import { type Context, modelsLine, readContext } from "./context.js";
 import { type Collected, collectFindings, readCandidates } from "./findings.js";
 import { appendTrace, resolveRunDir, RunDirError } from "./run-dir.js";
 import type { Candidate, Finding } from "./schemas.js";
@@ -164,6 +164,7 @@ export function renderReport(context: Context, input: ReportInput): string {
     `- **Target:** current · branch \`${t.branch ?? "(detached)"}\` · HEAD \`${t.head_sha.slice(0, 12)}\`${t.dirty ? " · dirty (uncommitted changes included)" : ""}`,
     `- **Base:** \`${t.base_ref}\` (merge-base \`${t.merge_base.slice(0, 12)}\`)`,
     `- **Preset:** ${context.preset} · **Harness:** ${context.harness} · **Files changed:** ${context.files.length}`,
+    `- **Models:** ${modelsLine(context.models)}`,
     `- **Lenses:** ${outcomes.map((o) => `${o.lens} (${o.status === "ok" ? o.count : o.status})`).join(", ")}`,
     `- **Verified:** ${candidates.length} candidate(s) from ${findings.length} finding(s) (limit ${context.limits.maxVerified})`,
     `- **Results:** ${counts(ranked)}${

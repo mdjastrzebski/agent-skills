@@ -20,6 +20,7 @@ export function runDir(
     run_dir: dir,
     created_at: "2026-11-01T12:34:56.000Z",
     harness: "claude",
+    config_files: [],
     skill_dir: "/skill",
     repo_root: root,
     code_root: root,

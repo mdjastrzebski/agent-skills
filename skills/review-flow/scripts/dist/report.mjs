@@ -15,6 +15,15 @@ function isEntry(moduleUrl, name) {
 	return basename(self).replace(/\.[^.]+$/, "") === name && realpathSync(script) === realpathSync(self);
 }
 // src/context.ts
+/** `opus/medium`, or just the model when effort is the harness default (or folded into the id, as in Cursor). */
+function modelLabel({ model, effort }) {
+	return effort ? `${model}/${effort}` : model;
+}
+/** The roles a run spawns subagents for today; the merger pass is not built yet. */
+const ACTIVE_ROLES = ["reviewer", "verifier"];
+function modelsLine(models) {
+	return ACTIVE_ROLES.map((role) => `${role}: ${modelLabel(models[role])}`).join(" · ");
+}
 function readContext(runDir) {
 	return JSON.parse(readFileSync(join(runDir, "context.json"), "utf8"));
 }
@@ -3432,6 +3441,7 @@ function renderReport(context, input) {
 		`- **Target:** current · branch \`${t.branch ?? "(detached)"}\` · HEAD \`${t.head_sha.slice(0, 12)}\`${t.dirty ? " · dirty (uncommitted changes included)" : ""}`,
 		`- **Base:** \`${t.base_ref}\` (merge-base \`${t.merge_base.slice(0, 12)}\`)`,
 		`- **Preset:** ${context.preset} · **Harness:** ${context.harness} · **Files changed:** ${context.files.length}`,
+		`- **Models:** ${modelsLine(context.models)}`,
 		`- **Lenses:** ${outcomes.map((o) => `${o.lens} (${o.status === "ok" ? o.count : o.status})`).join(", ")}`,
 		`- **Verified:** ${candidates.length} candidate(s) from ${findings.length} finding(s) (limit ${context.limits.maxVerified})`,
 		`- **Results:** ${counts(ranked)}${ranked.problems.length ? ` · ${ranked.problems.length} verification failed` : ""}${unverified.length ? ` · ${unverified.length} not verified (over limit)` : ""}`,

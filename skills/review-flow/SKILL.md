@@ -26,21 +26,23 @@ Status: only `current` mode is implemented. Verifiers may run repros and check c
 - **Base.** Default: the repo's default branch (detected). "Just my uncommitted changes" → `--base HEAD`. A named base → `--base <ref>`.
 - **Preset.** `standard` | `deep` if the user names one ("deep review", "be thorough" → `deep`); otherwise omit (config default, usually `standard`). The preset sets the lenses (`deep` adds a second correctness pass, `correctness-alt`), the model and effort for each role, how many candidates get verified, and how many subagents run at once; `prepare` resolves all of it into `context.json`.
 - **Lenses.** Only if the user names some: `--lenses a,b`.
+- **Models.** Only if the user asks for one for this run ("use sonnet for verification", "max effort verifiers"): `--model <role>=<model>` and `--effort <role>=<low|medium|high|xhigh|max|default>`, roles `reviewer` | `verifier`. They apply to the chosen preset and harness. For a lasting change, point the user to the config (below) instead.
 
 ## Stage 1: Prepare
 
 ```bash
-node <skill>/scripts/dist/prepare.mjs --harness <claude|cursor> [--base <ref>] [--preset <p>] [--lenses a,b]
+node <skill>/scripts/dist/prepare.mjs --harness <claude|cursor> [--base <ref>] [--preset <p>] [--lenses a,b] [--model role=model]... [--effort role=effort]...
 ```
 
 - `--harness` names the agent you are running in: `claude` in Claude Code, `cursor` in Cursor. It picks that harness's models from the preset, so always pass it.
-- The last stdout line is the run directory (`<runDir>`). The lines before it summarize target, files and lenses: tell the user in one line, e.g. "Reviewing feature/cart vs origin/main · 7 files · preset: standard · lenses: correctness, security, tests, performance, spec".
+- The last stdout line is the run directory (`<runDir>`). The lines before it summarize the run. In your first message to the user, give the target in one line ("Reviewing feature/cart vs origin/main · 7 files · lenses: correctness, security, tests, performance, spec") and the `preset: …` line as printed ("preset: standard · reviewer: opus/medium · verifier: opus/medium · lenses: 5").
+- The `config:` line names the config files applied. If it says `built-in defaults only`, offer once, after the report, to create a repo config with `node <skill>/scripts/dist/config.mjs init`. Don't run it unless the user agrees, and don't offer again in the same conversation.
 - Exit 1 with `nothing to review` → tell the user there are no changes against the base and stop. Other exit 1 → show the message (config or git error) and stop. Exit 2 → you passed a bad flag; fix it.
 - Read `<runDir>/context.json` for `lenses` (each has `name`, `prompt`, `output`), `models.reviewer`, `models.verifier` (each `{ model, effort }`) and `limits.parallel`. Don't read the diff or the findings yourself; the subagents do.
 
 ## Stage 2: Review (one subagent per lens)
 
-Spawn one subagent per entry in `context.lenses`, at most `limits.parallel` at a time (send a batch in one message so they run in parallel). In Claude Code use the Agent tool with a general-purpose subagent (it needs Read and Bash) and set its `model` to `models.reviewer.model` and its `effort` to `models.reviewer.effort` (leave `effort` unset when it is null). In Cursor, `model` already carries the effort (`opus[effort=high]`).
+Spawn one subagent per entry in `context.lenses`, at most `limits.parallel` at a time (send a batch in one message so they run in parallel). In Claude Code use the Agent tool with a general-purpose subagent (it needs Read and Bash) and always set its `model` to `models.reviewer.model` and its `effort` to `models.reviewer.effort` (leave `effort` unset when it is null, so the harness default applies). Never drop or change them: the report header and `trace.jsonl` state these models as the ones used. In Cursor, `model` already carries the effort (`opus[effort=high]`).
 
 Each subagent gets this prompt, with the placeholders filled in, and nothing else from this conversation:
 
@@ -106,4 +108,4 @@ Don't paste the whole report. Offer to walk through specific findings if the use
 
 ## Configuration
 
-`node <skill>/scripts/dist/config.mjs show` prints the effective config (built-in defaults < `~/.config/review-flow/config.json` < `<repo>/review-flow.config.json` < `--set key=value`). Useful keys: `preset`, `presets` (lenses, limits, and `models.<harness>.<role>.{model,effort}` per preset), `scoring` (weights and `fixBeforeMergeThreshold`), `base`, `ignore` (globs left out of the diff), `specs` (spec documents for the spec lens; auto-detected when absent), `lenses.enabled`, `lenses.custom`. `prepare.mjs` accepts the same `--set key=value` overrides for one run.
+`node <skill>/scripts/dist/config.mjs show` prints the effective config (built-in defaults < `~/.config/review-flow/config.json` < `<repo>/review-flow.config.json` < `--set key=value`) and where each value comes from. `config.mjs init` writes a starter `review-flow.config.json` (commented-out defaults plus detected base and checks); it refuses to overwrite one without `--force`. Personal choices such as preferred models belong in the user file, team choices in the repo file. Useful keys: `preset`, `presets` (lenses, limits, and `models.<harness>.<role>.{model,effort}` per preset), `scoring` (weights and `fixBeforeMergeThreshold`), `base`, `ignore` (globs left out of the diff), `specs` (spec documents for the spec lens; auto-detected when absent), `lenses.enabled`, `lenses.custom`. `prepare.mjs` accepts the same `--set key=value` overrides for one run.

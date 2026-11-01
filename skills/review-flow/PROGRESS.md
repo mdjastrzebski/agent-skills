@@ -15,7 +15,7 @@ Before §14 existed, work followed a different phase plan. Its phases 1–2 (sch
 | 4 | Verification (read-only verifiers, verdicts, placeholder ranking) | ✅ done |
 | 5 | Dedup + scoring + presets, vitest for dedup/scoring/rendering | ✅ done |
 | 6 | Executed verification (`scratch.mjs` worktrees) | ✅ done |
-| 7 | Config + models per role applied to subagents | ⬜ (config itself done in foundations) |
+| 7 | Config + models per role applied to subagents | ✅ done (dogfood run pending) |
 | 8 | Branch and PR modes | ⬜ |
 | 9 | Publish to GitHub | ⬜ |
 | 10 | Cursor support | ⬜ |
@@ -97,3 +97,10 @@ Before §14 existed, work followed a different phase plan. Its phases 1–2 (sch
 - **Open (for the user):** dogfood c-2: scratch worktrees are full checkouts inside the project tree, so file watchers (Metro, `jest --watch`, VS Code, watchman) see them come and go; up to 6 at once in the deep preset. Moving them to `os.tmpdir()` would change the SPEC §5 layout, so it was not done.
 - Known gap: the failure test covers a bad `head_sha` (fails at `worktree add`), not a failure after the worktree is registered (e.g. `git apply`); the cleanup in that path is exercised only by the dogfood run's real `diff.context` failure.
 
+### Step 7: config + models per role
+- Config layering, `$schema`, `config init` and `config show` were already done in foundations; models per preset and harness (`context.json` `models.<role>`) and the Cursor effort folding in step 5. This step adds the run-time side.
+- **Summary line (deviation from SPEC §4a "the agent runs `show` at the start"):** `prepare.mjs` prints it instead, from the same `loadConfig` result, so the agent makes one call and the line always matches `context.json`: `preset: <p> · reviewer: <model>[/<effort>] · verifier: … · lenses: <n>` (`modelsLine` in `context.ts`; the merger is left out until its pass exists; null effort prints the bare model). The target/files line no longer repeats the preset. SPEC §4a reworded.
+- **`config:` line + `context.json` `config_files`:** the user/repo config files that existed and were applied (`[{source, path}]`, empty = defaults only). The line reads `config: built-in defaults only (no review-flow.config.json; config.mjs init creates one)` in that case, and SKILL.md has the agent offer `init` once, after the report, only with the user's consent.
+- **Per-run model overrides:** `prepare --model <role>=<model>` / `--effort <role>=<effort|default>` (repeatable; `default` = null). They are turned into `--set presets.<p>.models.<harness>.<role>.<field>=…` for the preset the layers chose, which takes a second `loadConfig` pass (the first one learns the preset). Values are validated by the config schema like any `--set`; a bad role or missing `=` is a `PrepareError` (exit 1). Cursor folding applies after, so `--model reviewer=x --effort reviewer=high` gives `x[effort=high]`.
+- **Models recorded:** the `prepare` trace line now has `preset` and `models` (the resolved per-role models the agent is told to pass unchanged), and the report header a `- **Models:** reviewer: … · verifier: …` line. SKILL.md says the agent must always pass `model`/`effort` as given, since the trace and report state them as used. Per-subagent trace lines and the "model not applied" warning (Cursor without per-subagent models) are left for step 10.
+- Tests: prepare (config files recorded, overrides land in a repo-chosen `deep` preset, `default` effort, Cursor folding with overrides, bad role/effort errors, trace models), CLI (summary and `config:` lines, repeated and `--flag=value` forms), report header models line.

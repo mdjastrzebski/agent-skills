@@ -43,6 +43,18 @@ export type Role = "reviewer" | "merger" | "verifier";
 /** `effort` null = the harness default. */
 export type RoleModel = { model: string; effort: string | null };
 
+/** `opus/medium`, or just the model when effort is the harness default (or folded into the id, as in Cursor). */
+export function modelLabel({ model, effort }: RoleModel): string {
+  return effort ? `${model}/${effort}` : model;
+}
+
+/** The roles a run spawns subagents for today; the merger pass is not built yet. */
+export const ACTIVE_ROLES = ["reviewer", "verifier"] as const satisfies readonly Role[];
+
+export function modelsLine(models: Record<Role, RoleModel>): string {
+  return ACTIVE_ROLES.map((role) => `${role}: ${modelLabel(models[role])}`).join(" · ");
+}
+
 /** `context.json`: everything later stages need, so no step re-derives it. Paths are absolute unless noted. */
 export type Context = {
   version: 1;
@@ -50,6 +62,8 @@ export type Context = {
   run_dir: string;
   created_at: string;
   harness: string;
+  /** Config files that existed and were applied (user, then repo); empty = built-in defaults only. */
+  config_files: { source: "user" | "repo"; path: string }[];
   skill_dir: string;
   repo_root: string;
   code_root: string;

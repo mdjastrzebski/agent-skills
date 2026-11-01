@@ -85,7 +85,7 @@ The preset controls effort only, never the reporting threshold. A preset is a na
 1. Built-in defaults, from `defaults.json` in the skill folder
 2. A user file: `~/.config/review-flow/config.json`, for personal choices like preferred models
 3. A repo file: `review-flow.config.json` at the repo root, committed and shared by the team
-4. Per-run overrides from the user's request ("…use opus for verification"), passed to scripts as `--set key=value`
+4. Per-run overrides from the user's request ("…use opus for verification"), passed to scripts as `--set key=value`. Model overrides use `prepare.mjs --model <role>=<model>` / `--effort <role>=<effort|default>`, which target the effective preset and harness
 
 Config is JSON with a `$schema` field that points to `schemas/config.schema.json` in the skill folder. That gives autocomplete and validation in VS Code and Cursor. Unknown keys are an error, and the error suggests the closest valid key.
 
@@ -118,7 +118,7 @@ Config is JSON with a `$schema` field that points to `schemas/config.schema.json
 ### Commands (UX)
 - `node scripts/dist/config.mjs init` writes a minimal `review-flow.config.json` filled from auto-detection (the stack, check commands, base branch). Every key is commented out except the ones that differ from the defaults.
 - `node scripts/dist/config.mjs show` prints the **effective** config, with the source of each value (default / user / repo / override).
-- The agent runs `show` at the start of every run and puts a one-line summary in its first message, e.g. "preset: standard · reviewer: opus/medium · verifier: opus/medium · lenses: 5". If no config file exists, it offers `init` once.
+- `prepare.mjs` prints a one-line summary of the effective settings, e.g. "preset: standard · reviewer: opus/medium · verifier: opus/medium · lenses: 5", and a `config:` line naming the config files applied. The agent puts the summary in its first message. If no config file exists, it offers `init` once.
 
 ### Applying models
 - `prepare.mjs` resolves the model and effort for each role from the chosen preset into `context.json` (`models.<role> = { model, effort }`), so the agent never interprets the config itself.
@@ -324,6 +324,7 @@ Each step must be usable on its own. Prefer simple stubs over half-built feature
 - [x] Step 4: Verification (read-only verifiers, placeholder ranking; dogfood run)
 - [x] Step 5: Dedup + scoring + presets (deterministic dedup, score.mjs, second correctness pass; dogfood run)
 - [x] Step 6: Executed verification (scratch.mjs worktrees, cleanup.mjs, executed evidence; dogfood run)
+- [x] Step 7: Configuration + models per role (config layering, `config init`/`show`, models applied per subagent, summary line, models in trace and report)
 
 ### Next steps
 
@@ -351,11 +352,11 @@ Goal: a complete run that produces a report, even without verification.
 - Verifiers may write repros and run check commands, producing `executed` evidence.
 - Acceptance check: the user's tree, index and stash are unchanged after a run.
 
-#### Step 7. Configuration + models per role (the next thing to build)
+#### Step 7. Configuration + models per role
 - §4a config layering, `$schema`, `config init` and `config show`.
 - Models per role applied to subagents (Claude Code), with a summary line at the start of each run and models recorded in the trace and report.
 
-#### Step 8. Branch and PR modes
+#### Step 8. Branch and PR modes (the next thing to build)
 - `branch:<name>` (snapshot via `git show`) and `pr:<n>` (`gh pr checkout --detach` in a worktree, fork PRs included).
 - Scratch worktrees for both modes.
 - Dogfood: review a real colleague's PR.

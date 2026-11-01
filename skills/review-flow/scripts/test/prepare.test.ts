@@ -73,7 +73,40 @@ describe("prepare (current mode)", () => {
       .trim()
       .split("\n")
       .map((line) => JSON.parse(line));
-    expect(trace).toMatchObject([{ step: "prepare", status: "ok", harness: "claude" }]);
+    expect(trace).toMatchObject([{ step: "prepare", status: "ok", harness: "claude", preset: "standard" }]);
+    expect(trace[0].models).toEqual(context.models);
+    expect(context.config_files).toEqual([]);
+  });
+
+  it("records the config files that were applied", () => {
+    const root = repo();
+    write(root, "review-flow.config.json", '{ "preset": "deep" }\n');
+    const user = join(mkdtempSync(join(tmpdir(), "review-flow-user-")), "config.json");
+    write(user, "", '{ "ignore": [] }\n');
+    expect(run(root, { userConfigPath: user }).context.config_files).toEqual([
+      { source: "user", path: user },
+      { source: "repo", path: join(root, "review-flow.config.json") },
+    ]);
+  });
+
+  it("applies --model and --effort to the effective preset and harness", () => {
+    const root = repo();
+    // The repo config picks the preset, so the overrides must land in `deep`, not the default `standard`.
+    write(root, "review-flow.config.json", '{ "preset": "deep" }\n');
+    const { context } = run(root, { models: ["verifier=sonnet"], efforts: ["verifier=max", "reviewer=default"] });
+    expect(context.preset).toBe("deep");
+    expect(context.models).toEqual({
+      reviewer: { model: "opus", effort: null },
+      merger: { model: "haiku", effort: null },
+      verifier: { model: "sonnet", effort: "max" },
+    });
+    const cursor = run(root, { harness: "cursor", models: ["reviewer=claude-opus-5"], efforts: ["reviewer=high"] });
+    expect(cursor.context.models.reviewer).toEqual({ model: "claude-opus-5[effort=high]", effort: null });
+    expect(() => run(root, { models: ["judge=opus"] })).toThrow(/--model judge=opus: expected/);
+    expect(() => run(root, { models: ["verifier"] })).toThrow(/expected/);
+    expect(() => run(root, { efforts: ["verifier=extreme"] })).toThrow(
+      /presets\.deep\.models\.claude\.verifier\.effort/,
+    );
   });
 
   it("runs the spec lens only when spec documents exist, and honors --lenses", () => {
@@ -334,6 +367,24 @@ describe("dist/prepare.mjs CLI", () => {
     const context = JSON.parse(readFileSync(join(lines.at(-1)!, "context.json"), "utf8"));
     expect(context.preset).toBe("deep");
     expect(context.lenses.map((lens: { name: string }) => lens.name)).toContain("correctness-alt");
+    expect(lines.slice(-3, -1)).toEqual([
+      "preset: deep · reviewer: opus/high · verifier: opus/high · lenses: 5",
+      "config: built-in defaults only (no review-flow.config.json; config.mjs init creates one)",
+    ]);
+  });
+
+  it("takes repeated --model / --effort flags and names applied config files", () => {
+    const root = repo();
+    write(root, "review-flow.config.json", "{}\n");
+    const env = { ...process.env, XDG_CONFIG_HOME: mkdtempSync(join(tmpdir(), "review-flow-xdg-")) };
+    const args = [cli, "--model", "verifier=sonnet", "--effort=verifier=default", "--model", "reviewer=haiku"];
+    const result = spawnSync(process.execPath, args, { cwd: root, env, encoding: "utf8" });
+    expect(result.status, result.stderr).toBe(0);
+    const lines = result.stdout.trim().split("\n");
+    expect(lines.slice(-3, -1)).toEqual([
+      "preset: standard · reviewer: haiku/medium · verifier: sonnet · lenses: 4",
+      `config: repo ${join(root, "review-flow.config.json")}`,
+    ]);
   });
 
   it("exits 1 with a message on errors and 2 on usage errors", () => {

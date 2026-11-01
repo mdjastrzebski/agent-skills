@@ -3695,6 +3695,15 @@ function detectSpecs(changed, allFiles) {
 	const owner = (spec) => posix.dirname(spec.replace(/(^|\/)specs\/.*$/, "$1x")).replace(/^\.$/, "");
 	return allFiles.filter((file) => SPEC_FILE.test(file) && dirs.has(owner(file))).toSorted((a, b) => b.split("/").length - a.split("/").length || a.localeCompare(b)).slice(0, MAX_SPECS);
 }
+/** `opus/medium`, or just the model when effort is the harness default (or folded into the id, as in Cursor). */
+function modelLabel({ model, effort }) {
+	return effort ? `${model}/${effort}` : model;
+}
+/** The roles a run spawns subagents for today; the merger pass is not built yet. */
+const ACTIVE_ROLES = ["reviewer", "verifier"];
+function modelsLine(models) {
+	return ACTIVE_ROLES.map((role) => `${role}: ${modelLabel(models[role])}`).join(" · ");
+}
 const CODE_EXTENSIONS = [
 	".ts",
 	".tsx",
@@ -3930,13 +3939,18 @@ function appendTrace(runDir, entry) {
 * Stage 1: create a run directory with `context.json` and `diff.patch` for the reviewers.
 *
 * Usage: node scripts/dist/prepare.mjs [--target current] [--base <ref>] [--preset standard|deep]
-*                                      [--lenses a,b] [--harness claude] [--set key=value]... [--repo <dir>]
+*                                      [--lenses a,b] [--harness claude|cursor] [--model role=model]...
+*                                      [--effort role=effort|default]... [--set key=value]... [--repo <dir>]
 *
 * Only `current` mode exists so far: the working tree (committed, staged, unstaged and untracked changes)
 * against its merge-base with `base`. `--base HEAD` reviews just the uncommitted changes.
 * Read-only towards the user's checkout: no checkout, stash, reset, or index refresh.
 *
-* Prints a short summary, then the run directory as the last line of stdout.
+* `--model` / `--effort` override one role (reviewer, merger, verifier) in the chosen preset for the chosen harness,
+* as the matching `--set presets.<preset>.models.<harness>.<role>.…` would.
+*
+* Prints a short summary (target, files and lenses, preset and models, config files), then the run directory as the
+* last line of stdout.
 * Exit 0 on success, 1 on config/git errors or when there is nothing to review, 2 on usage errors.
 */
 var PrepareError = class extends Error {};
@@ -4032,6 +4046,24 @@ function resolveLenses(repoRoot, config, hasSpecs, only) {
 	if (preset.secondCorrectnessPass && index >= 0 && !chosen.some((lens) => lens.name === "correctness-alt")) chosen.splice(index + 1, 0, builtinLens(SECOND_CORRECTNESS_LENS));
 	return chosen;
 }
+const ROLES = [
+	"reviewer",
+	"merger",
+	"verifier"
+];
+/** `--model` / `--effort` as `--set` overrides, so the config schema validates them like any other override. */
+function roleSets(preset, harness, models, efforts) {
+	const sets = [];
+	for (const [field, args] of [["model", models], ["effort", efforts]]) for (const arg of args) {
+		const eq = arg.indexOf("=");
+		const role = arg.slice(0, eq);
+		const value = arg.slice(eq + 1);
+		if (eq < 0 || !ROLES.includes(role) || !value) throw new PrepareError(`--${field} ${arg}: expected <${ROLES.join("|")}>=<${field}>`);
+		const typed = field === "effort" && value === "default" ? "null" : value;
+		sets.push(`presets.${preset}.models.${harness}.${role}.${field}=${typed}`);
+	}
+	return sets;
+}
 /** Claude Code takes effort as its own subagent parameter; Cursor takes it as a model option. */
 function resolveModels(models, harness) {
 	if (harness === "claude") return models;
@@ -4053,13 +4085,18 @@ function prepareIn(repoRoot, options) {
 	const startedAt = options.now ?? /* @__PURE__ */ new Date();
 	const target = options.target ?? "current";
 	if (target !== "current") throw new PrepareError(`target "${target}" is not supported yet; only "current" is implemented`);
+	const harness = options.harness ?? "claude";
+	if (harness !== "claude" && harness !== "cursor") throw new PrepareError(`unknown harness "${harness}" (claude|cursor)`);
 	const sets = [...options.sets ?? []];
 	if (options.preset) sets.push(`preset=${options.preset}`);
-	const { config } = loadConfig({
+	const load = (extra) => loadConfig({
 		repoRoot,
-		sets,
+		sets: [...sets, ...extra],
 		userConfigPath: options.userConfigPath
 	});
+	let { config, files } = load([]);
+	const roleOverrides = roleSets(config.preset, harness, options.models ?? [], options.efforts ?? []);
+	if (roleOverrides.length) ({config, files} = load(roleOverrides));
 	const headSha = tryGit(repoRoot, [
 		"rev-parse",
 		"--verify",
@@ -4098,8 +4135,6 @@ function prepareIn(repoRoot, options) {
 		test: config.checks.test === void 0 ? detected.test : config.checks.test
 	};
 	const preset = config.presets[config.preset];
-	const harness = options.harness ?? "claude";
-	if (harness !== "claude" && harness !== "cursor") throw new PrepareError(`unknown harness "${harness}" (claude|cursor)`);
 	const runDir = createRunDir(repoRoot, "current", startedAt);
 	const context = {
 		version: 1,
@@ -4107,6 +4142,10 @@ function prepareIn(repoRoot, options) {
 		run_dir: runDir,
 		created_at: startedAt.toISOString(),
 		harness,
+		config_files: files.flatMap((file) => file.found && file.source !== "default" ? [{
+			source: file.source,
+			path: file.path
+		}] : []),
 		skill_dir: skillDir(),
 		repo_root: repoRoot,
 		code_root: repoRoot,
@@ -4147,26 +4186,35 @@ function prepareIn(repoRoot, options) {
 		status: "ok",
 		started_at: startedAt.toISOString(),
 		duration_ms: Date.now() - startedAt.getTime(),
-		harness
+		harness,
+		preset: context.preset,
+		models: context.models
 	});
 	return {
 		runDir,
 		context
 	};
 }
-const USAGE = "usage: prepare.mjs [--target current] [--base <ref>] [--preset standard|deep] [--lenses a,b]\n                   [--harness claude|cursor] [--set key=value]... [--repo <dir>]";
+const USAGE = "usage: prepare.mjs [--target current] [--base <ref>] [--preset standard|deep] [--lenses a,b]\n                   [--harness claude|cursor] [--model role=model]... [--effort role=effort|default]...\n                   [--set key=value]... [--repo <dir>]";
 const VALUE_FLAGS = [
 	"--target",
 	"--base",
 	"--preset",
 	"--lenses",
 	"--harness",
+	"--model",
+	"--effort",
 	"--set",
 	"--repo"
 ];
+const REPEATED_FLAGS = [
+	"--model",
+	"--effort",
+	"--set"
+];
 function main(argv) {
 	const values = {};
-	const sets = [];
+	const repeated = Object.fromEntries(REPEATED_FLAGS.map((flag) => [flag, []]));
 	for (let i = 0; i < argv.length; i++) {
 		const eq = argv[i].indexOf("=");
 		const [flag, inline] = argv[i].startsWith("--") && eq > 0 ? [argv[i].slice(0, eq), argv[i].slice(eq + 1)] : [argv[i]];
@@ -4179,7 +4227,7 @@ function main(argv) {
 			console.error(`${flag} needs a value\n${USAGE}`);
 			return 2;
 		}
-		if (flag === "--set") sets.push(value);
+		if (REPEATED_FLAGS.includes(flag)) repeated[flag].push(value);
 		else values[flag] = value;
 	}
 	const repoRoot = values["--repo"] ? resolve(values["--repo"]) : repoRootFrom(process.cwd());
@@ -4195,11 +4243,15 @@ function main(argv) {
 			preset: values["--preset"],
 			lenses: values["--lenses"]?.split(",").map((s) => s.trim()).filter(Boolean),
 			harness: values["--harness"],
-			sets
+			models: repeated["--model"],
+			efforts: repeated["--effort"],
+			sets: repeated["--set"]
 		});
 		const t = context.target;
 		console.log(`target: current (${t.branch ?? "detached"} @ ${t.head_sha.slice(0, 12)}${t.dirty ? ", dirty" : ""}) vs ${t.base_ref} (merge-base ${t.merge_base.slice(0, 12)})`);
-		console.log(`files: ${context.files.length} · preset: ${context.preset} · lenses: ${context.lenses.map((l) => l.name).join(", ")}`);
+		console.log(`files: ${context.files.length} · lenses: ${context.lenses.map((l) => l.name).join(", ")}`);
+		console.log(`preset: ${context.preset} · ${modelsLine(context.models)} · lenses: ${context.lenses.length}`);
+		console.log(context.config_files.length ? `config: ${context.config_files.map((file) => `${file.source} ${file.path}`).join(", ")}` : `config: built-in defaults only (no ${REPO_CONFIG_FILE}; config.mjs init creates one)`);
 		console.log(runDir);
 		return 0;
 	} catch (error) {

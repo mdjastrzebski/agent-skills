@@ -106,6 +106,9 @@ describe("renderReport", () => {
     );
     expect(md).toContain("confirmed items scoring 5 or more are fix before merge");
     expect(md).toContain("HEAD `bbbbbbbbbbbb` · dirty");
+    expect(md).toContain(
+      "- **Preset:** standard · **Harness:** claude · **Files changed:** 0\n- **Models:** reviewer: opus/medium · verifier: opus/medium\n",
+    );
     expect(md).toContain("- **Lenses:** correctness (2), security (1), tests (missing)");
     expect(md).toContain("- **Verified:** 3 candidate(s) from 3 finding(s) (limit 25)");
     expect(md).toContain("- **Results:** 1 fix before merge · 1 needs human judgment · 0 follow-up · 1 dismissed\n");
