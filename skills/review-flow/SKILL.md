@@ -30,9 +30,10 @@ Status: only `current` mode is implemented. Verifiers may run repros and check c
 ## Stage 1: Prepare
 
 ```bash
-node <skill>/scripts/dist/prepare.mjs [--base <ref>] [--preset <p>] [--lenses a,b]
+node <skill>/scripts/dist/prepare.mjs --harness <claude|cursor> [--base <ref>] [--preset <p>] [--lenses a,b]
 ```
 
+- `--harness` names the agent you are running in: `claude` in Claude Code, `cursor` in Cursor. It picks that harness's models from the preset, so always pass it.
 - The last stdout line is the run directory (`<runDir>`). The lines before it summarize target, files and lenses: tell the user in one line, e.g. "Reviewing feature/cart vs origin/main · 7 files · preset: standard · lenses: correctness, security, tests, performance, spec".
 - Exit 1 with `nothing to review` → tell the user there are no changes against the base and stop. Other exit 1 → show the message (config or git error) and stop. Exit 2 → you passed a bad flag; fix it.
 - Read `<runDir>/context.json` for `lenses` (each has `name`, `prompt`, `output`), `models.reviewer`, `models.verifier` (each `{ model, effort }`) and `limits.parallel`. Don't read the diff or the findings yourself; the subagents do.
