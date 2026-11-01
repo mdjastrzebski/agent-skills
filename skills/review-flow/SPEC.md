@@ -323,6 +323,7 @@ Each step must be usable on its own. Prefer simple stubs over half-built feature
 - [x] Step 3: Walking skeleton (report.mjs + SKILL.md wiring; first dogfood run)
 - [x] Step 4: Verification (read-only verifiers, placeholder ranking; dogfood run)
 - [x] Step 5: Dedup + scoring + presets (deterministic dedup, score.mjs, second correctness pass; dogfood run)
+- [x] Step 6: Executed verification (scratch.mjs worktrees, cleanup.mjs, executed evidence; dogfood run)
 
 ### Next steps
 
@@ -345,12 +346,12 @@ Goal: a complete run that produces a report, even without verification.
 - The `preset` input (§4 table minus execution).
 - Unit tests (vitest) for dedup, scoring and report rendering.
 
-#### Step 6. Executed verification (the next thing to build)
+#### Step 6. Executed verification
 - `scratch.mjs` worktrees (for `current` mode: HEAD plus uncommitted changes applied, `node_modules` symlinked).
 - Verifiers may write repros and run check commands, producing `executed` evidence.
 - Acceptance check: the user's tree, index and stash are unchanged after a run.
 
-#### Step 7. Configuration + models per role
+#### Step 7. Configuration + models per role (the next thing to build)
 - §4a config layering, `$schema`, `config init` and `config show`.
 - Models per role applied to subagents (Claude Code), with a summary line at the start of each run and models recorded in the trace and report.
 

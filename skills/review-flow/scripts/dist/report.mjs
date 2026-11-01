@@ -3411,6 +3411,13 @@ function renderDismissed(item) {
 		""
 	];
 }
+function evidenceCounts(ranked) {
+	return [
+		"executed",
+		"traced",
+		"reasoned"
+	].map((type) => `${ranked.items.filter((item) => item.verdict.evidence_type === type).length} ${type}`).join(", ");
+}
 function counts(ranked) {
 	return BUCKETS.map((bucket) => `${inBucket(ranked, bucket).length} ${BUCKET_TITLES[bucket].toLowerCase()}`).join(" · ");
 }
@@ -3420,7 +3427,7 @@ function renderReport(context, input) {
 	const lines = [
 		`# Review: ${t.branch ?? "detached HEAD"} (current)`,
 		"",
-		`> Each candidate was checked by an independent, read-only verifier (traced or reasoned evidence; nothing was executed). Score = severity × confidence × impact; confirmed items scoring ${num(ranked.scoring.fixBeforeMergeThreshold)} or more are fix before merge.`,
+		`> Each candidate was checked by an independent verifier, ${context.limits.allowExecution ? "which could run repros and checks in a throwaway worktree, never in your checkout" : "read-only (execution disabled by the preset)"} (evidence: ${evidenceCounts(ranked)}). Score = severity × confidence × impact; confirmed items scoring ${num(ranked.scoring.fixBeforeMergeThreshold)} or more are fix before merge.`,
 		"",
 		`- **Target:** current · branch \`${t.branch ?? "(detached)"}\` · HEAD \`${t.head_sha.slice(0, 12)}\`${t.dirty ? " · dirty (uncommitted changes included)" : ""}`,
 		`- **Base:** \`${t.base_ref}\` (merge-base \`${t.merge_base.slice(0, 12)}\`)`,
@@ -3472,7 +3479,7 @@ const SUMMARY_TAGS = {
 /** The chat summary the agent relays: at most 10 lines. */
 function renderSummary(input, reportPath) {
 	const { outcomes, ranked, unverified } = input;
-	const lines = [counts(ranked)];
+	const lines = [`${counts(ranked)} · evidence: ${evidenceCounts(ranked)}`];
 	const problems = [...outcomes.filter((o) => o.status !== "ok").map((o) => `reviewer ${o.lens} ${o.status}`), ...ranked.problems.map((p) => `verdict ${p.candidate.id} ${p.status}`)];
 	if (unverified.length) problems.push(`${unverified.length} finding(s) over the verification limit`);
 	if (problems.length) lines.push(`problems: ${problems.join(", ")}`);

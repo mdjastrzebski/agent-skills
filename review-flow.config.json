@@ -1,5 +1,10 @@
 {
   // Dogfooding config for this repo: keep generated and bundled files out of review-flow's diffs.
+  // Verifiers run these from their scratch worktree (repo root); the skill's own package lives in a subdirectory.
+  "checks": {
+    "typecheck": "npm --prefix skills/review-flow/scripts run typecheck",
+    "test": "npm --prefix skills/review-flow/scripts test --"
+  },
   "ignore": ["skills/review-flow/scripts/dist/**", "skills/review-flow/schemas/*.json", "**/package-lock.json"],
   "$schema": "./skills/review-flow/schemas/config.schema.json"
 }

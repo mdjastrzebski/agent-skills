@@ -65,3 +65,31 @@ Dismissed by verifier (correct):
 Observations:
 - Nothing clustered, so this run didn't exercise dedup merging on real data; with high rigor (correctness-alt) it should. Try a high-rigor dogfood run in step 6.
 - The scoring threshold (5) means low/medium confirmed findings can never be "fix before merge" unless user-facing and executed (medium × 1.0 × 1.2 = 3.6). Expected per §8, but revisit in step 11 tuning.
+
+## Step 6: executed verification (2026-11-01)
+
+Run: `current --base HEAD` (the uncommitted step-6 diff, 12 files), preset deep, Claude Code, reviewers and verifiers on opus/high. Lenses: correctness 3, correctness-alt 4, security 2, tests 2, performance 1, spec 2. Dedup: 12 candidates from 14 findings (2 merged: correctness-1 + correctness-alt-2 + spec-1, all on the node_modules symlink), 7 possible duplicate pairs (left alone). Scored: 0 fix before merge, 0 needs judgment, 11 follow-up, 1 dismissed. Evidence: **7 executed**, 4 traced, 1 reasoned. No missing or invalid verdicts. First deep run; the merge shows correctness-alt doing its job.
+
+Acceptance check: `git status --porcelain=v2`, the index hash, branch, HEAD, `git stash list` and `git worktree list` were byte-identical before and after the run, and no worktree was left (11 scratch worktrees created and removed by verifiers, `cleanup.mjs` found none).
+
+Fixed (confirmed):
+- c-6 (correctness-alt-1, medium, executed): `cleanup` and the removal fallback ran a bare `git worktree prune`, which drops the user's own moved/unmounted worktrees. Removal is now targeted.
+- c-3 (correctness-1 + correctness-alt-2 + spec-1, medium, executed): workspace packages in a symlinked `node_modules` resolved to the user's checkout, so fixes applied in scratch didn't run. node_modules is now mirrored per entry, with in-repo links pointing into scratch.
+- c-1 (correctness-alt-3) and c-4 (security-1): vitest wrote its results cache through the symlink into the user's `node_modules/.vite`. Fixed by the same mirror, which leaves cache dirs out.
+- c-10 (correctness-3, executed): a user's `diff.context=0` made `git apply` reject the patch. **It actually happened during this run**: a verifier injected the config to reproduce it, so its first `scratch-create` failed (trace shows the error) and the half-made worktree was cleaned up. Added `--unified=3`.
+- c-12 (correctness-2, executed): re-create failed when the scratch dir was gone but still registered. Removal now runs unconditionally.
+- c-5 (tests-1) and c-11 (tests-2), executed via mutation runs in scratch: the failure path and the removal fallback were untested. Tests added. c-5's fix was rated `incomplete` (a bad sha fails before the worktree is registered); noted as a known gap.
+- c-7 (correctness-alt-4, executed): repo-relative test paths appended to `npm --prefix … test --` match nothing. verifier.md now says absolute `<scratch>` paths.
+- c-9 (spec-2): verifier.md allowed dependency-free execution without node_modules; now follows SPEC (don't execute).
+
+Deferred (confirmed, reasoned):
+- c-2 (performance-1, medium): scratch worktrees are full checkouts inside the user's project tree, visible to file watchers. Fixing it means moving them out of `<runDir>/scratch/`, a SPEC §5 change, so it's left for the user to decide.
+
+Dismissed by verifier (correct):
+- c-8 (security-2): "execution has no sandbox, isolation is prompt-only". The facts are right, but verifiers already had Bash and only prompt rules before this change; the verifier argued the change adds no capability. Fair; worth stating the trust model before PR mode (step 8), where the code under review isn't the user's.
+
+Observations:
+- Executed verification works and is much stronger: verifiers wrote repro tests in scratch and ran mutation checks there (disable a branch, run the suite, show it stays green). Several also tried the suggested fix in scratch and rated it from the result.
+- Verifiers reproduced against fresh fixture repos via the test helpers rather than the scratch checkout itself, which kept the user's repo out of it entirely. Good pattern to suggest in verifier.md if it doesn't keep happening on its own.
+- Eval fixture ideas: "global prune in a helper that should be scoped", "symlinked dependency dir shares writes", "porcelain git command honors user config".
+- Total: 6 reviewers + 12 verifiers; verifiers took 35–110 s each.

@@ -9,11 +9,12 @@ Review the user's current code with parallel lens reviewers, verify every findin
 
 `<skill>` below is the directory that contains this SKILL.md. Resolve it to an absolute path before running anything, and run every command from the user's repository.
 
-Status: only `current` mode is implemented, and verifiers read code but don't execute anything yet.
+Status: only `current` mode is implemented. Verifiers may run repros and check commands, but only in throwaway worktrees under the run directory (`scratch.mjs`).
 
 ## Hard rules
 
 - Never modify the user's working tree, index, branches or stash. No `git checkout`, `stash`, `reset`, `add`, `commit`, `push`. All run files live in `<repo>/.review-flow/runs/<run>/` (the run directory).
+- Code is executed only inside scratch worktrees (`<runDir>/scratch/<id>/`, created and removed by `scratch.mjs`), never in the user's checkout. Nobody installs packages.
 - Never write to GitHub. No `gh` write commands (`pr review`, `pr comment`, `pr merge`, …), from you or from subagents.
 - Never apply fixes. The report is advisory.
 - Stages talk through files in the run directory, not through chat. Don't paste findings between subagents, and never give a verifier anything about other candidates or verdicts.
@@ -73,7 +74,7 @@ Candidate id: <id>
 Write your verdict to <runDir>/verdicts/<id>.json and validate it as verifier.md describes.
 ```
 
-When all have finished, check that every `<runDir>/verdicts/<id>.json` exists. If one is missing, re-spawn that verifier once. Don't write or edit verdicts yourself; the report lists any that are missing or invalid.
+Verifiers create and remove their own scratch worktree when `limits.allowExecution` is true (verifier.md tells them how); you don't. When all have finished, check that every `<runDir>/verdicts/<id>.json` exists. If one is missing, re-spawn that verifier once. Don't write or edit verdicts yourself; the report lists any that are missing or invalid.
 
 ## Stage 5: Score
 
@@ -89,10 +90,15 @@ It scores each verdict (severity × confidence × impact) and writes `<runDir>/r
 node <skill>/scripts/dist/report.mjs <runDir>
 ```
 
-It writes `<runDir>/report.md` and prints a summary of at most 10 lines; the last line is the report path. Reply to the user with:
+It writes `<runDir>/report.md` and prints a summary of at most 10 lines; the last line is the report path. Then remove any worktree a verifier left behind (every other run file is kept):
 
-- the summary lines (counts and top items) as printed,
-- a note that verifiers didn't execute code,
+```bash
+node <skill>/scripts/dist/cleanup.mjs <runDir>
+```
+
+Reply to the user with:
+
+- the summary lines (counts, evidence types and top items) as printed,
 - the path to `report.md`.
 
 Don't paste the whole report. Offer to walk through specific findings if the user wants.

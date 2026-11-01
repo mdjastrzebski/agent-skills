@@ -101,7 +101,9 @@ describe("renderReport", () => {
     });
     const md = render(run);
     expect(md).toMatch(/^# Review: feature \(current\)\n/);
-    expect(md).toContain("independent, read-only verifier");
+    expect(md).toContain(
+      "run repros and checks in a throwaway worktree, never in your checkout (evidence: 0 executed, 3 traced, 0 reasoned)",
+    );
     expect(md).toContain("confirmed items scoring 5 or more are fix before merge");
     expect(md).toContain("HEAD `bbbbbbbbbbbb` · dirty");
     expect(md).toContain("- **Lenses:** correctness (2), security (1), tests (missing)");
@@ -143,6 +145,16 @@ describe("renderReport", () => {
     expect(md).toContain("**Verifier** (uncertain, traced)");
     // Within Dismissed: the uncertain item scores above the refuted one.
     expect(md.indexOf("c-2 (correctness-1)</summary>")).toBeLessThan(md.indexOf("c-3 (correctness-2)</summary>"));
+  });
+
+  it("counts executed evidence and says when the preset disabled execution", () => {
+    const run = setup();
+    writeVerdict(run.dir, "c-1", { ...verdict, candidate_id: "c-1" });
+    writeVerdict(run.dir, "c-2", { ...traced, candidate_id: "c-2" });
+    writeVerdict(run.dir, "c-3", { ...traced, candidate_id: "c-3", evidence_type: "reasoned" });
+    expect(render(run)).toContain("(evidence: 1 executed, 1 traced, 1 reasoned)");
+    run.context.limits.allowExecution = false;
+    expect(render(run)).toContain("verifier, read-only (execution disabled by the preset)");
   });
 
   it("shows every source id of a merged candidate", () => {
@@ -200,7 +212,7 @@ describe("report", () => {
     report(dir);
     expect(readFileSync(first.reportPath, "utf8")).toBe(firstText);
     expect(first.summary.split("\n")).toEqual([
-      "1 fix before merge · 1 needs human judgment · 1 follow-up · 0 dismissed",
+      "1 fix before merge · 1 needs human judgment · 1 follow-up · 0 dismissed · evidence: 0 executed, 3 traced, 0 reasoned",
       "- [fix, critical, 10.2] Shell injection via branch name (src/api.ts:3)",
       "- [needs judgment, high, 2.52] Total ignores discounts (src/cart.ts:10-12)",
       "- [follow-up, low, 1.02] Low one (src/cart.ts:40)",
