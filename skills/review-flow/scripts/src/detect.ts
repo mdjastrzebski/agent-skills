@@ -60,7 +60,7 @@ export function detectChecks(stack: Stack | null): Checks {
   let test: string | null = null;
   if (stack.testRunner === "jest") test = `${EXEC[pm]} jest --findRelatedTests`;
   else if (stack.testRunner === "vitest") test = `${EXEC[pm]} vitest related --run`;
-  else if (stack.scripts.test && !stack.scripts.test.includes("no test specified")) test = `${pm} test`;
+  else if (stack.scripts.test && !stack.scripts.test.includes("no test specified")) test = `${RUN[pm]} test`;
   return { typecheck, test };
 }
 

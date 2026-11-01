@@ -287,7 +287,7 @@ export function renderShow(loaded: LoadedConfig): string {
 const EXAMPLES: Partial<Record<keyof Config, unknown>> = {
   base: "main",
   specs: ["SPEC.md", "docs/specs/feature.md"],
-  checks: { typecheck: "npm run typecheck", test: "npm test" },
+  checks: { typecheck: "npm run typecheck", test: "npm run test" },
   ignore: ["**/*.snap", "**/generated/**"],
   lenses: {
     enabled: ["correctness", "security", "tests", "performance", "spec"],

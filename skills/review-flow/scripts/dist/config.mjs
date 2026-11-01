@@ -3219,7 +3219,7 @@ function detectChecks(stack) {
 	let test = null;
 	if (stack.testRunner === "jest") test = `${EXEC[pm]} jest --findRelatedTests`;
 	else if (stack.testRunner === "vitest") test = `${EXEC[pm]} vitest related --run`;
-	else if (stack.scripts.test && !stack.scripts.test.includes("no test specified")) test = `${pm} test`;
+	else if (stack.scripts.test && !stack.scripts.test.includes("no test specified")) test = `${RUN[pm]} test`;
 	return {
 		typecheck,
 		test
@@ -3526,7 +3526,7 @@ const EXAMPLES = {
 	specs: ["SPEC.md", "docs/specs/feature.md"],
 	checks: {
 		typecheck: "npm run typecheck",
-		test: "npm test"
+		test: "npm run test"
 	},
 	ignore: ["**/*.snap", "**/generated/**"],
 	lenses: {

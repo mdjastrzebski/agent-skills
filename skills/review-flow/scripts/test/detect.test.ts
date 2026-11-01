@@ -51,7 +51,8 @@ describe("detectChecks", () => {
   });
 
   it("falls back to the test script, ignoring npm's placeholder", () => {
-    expect(detectChecks(detectStack(project({ scripts: { test: "mocha" } }))).test).toBe("npm test");
+    expect(detectChecks(detectStack(project({ scripts: { test: "mocha" } }))).test).toBe("npm run test");
+    expect(detectChecks(detectStack(project({ scripts: { test: "mocha" } }, ["bun.lock"]))).test).toBe("bun run test");
     expect(
       detectChecks(detectStack(project({ scripts: { test: 'echo "Error: no test specified" && exit 1' } }))).test,
     ).toBeNull();
