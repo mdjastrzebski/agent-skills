@@ -25,7 +25,12 @@ Interview the user like a sharp senior engineer stress-testing the idea.
 
 ## 3. Present the spec for approval
 
-After the last question, present a concise spec and stop until the user approves:
+Write two versions of the spec after the last question:
+
+- **Full spec** — the detailed version the subagent will build from (contents listed in phase 4). Write it first and save it to a file outside the repo's tracked files (the agent's scratch or temp directory; otherwise `.implement-idea/<slug>.md` and make sure it is git-ignored).
+- **Summary** — the concise version the user reads, short enough to take in under a minute.
+
+Show the summary, give the user an easy way to see the full version, and stop until the user approves:
 
 ```markdown
 ## Spec: <title>
@@ -49,9 +54,13 @@ After the last question, present a concise spec and stop until the user approves
 - <how we'll know it works>
 
 **Implementation difficulty:** <simple | moderate | hard> → <agent and effort picked>
+
+**Full spec:** <path to file> — or say "show full spec" to see it here
 ```
 
-Approve, edit, or reject — do not start until the user says go. If they correct something, update the spec and re-present only the changed parts.
+Approve, edit, or reject — do not start until the user says go. If the user asks to see the full spec, print it in full. If they correct something, update both versions and re-present only the changed parts of the summary.
+
+The two versions must never disagree: the summary is a view of the full spec, not a separate document.
 
 ## 4. Delegate to a sized subagent
 
@@ -67,7 +76,12 @@ When in doubt between two tiers, pick the higher one. If the agent has no subage
 
 Give the subagent a self-contained brief — it does not see this conversation:
 
-- the full approved spec, verbatim
+- the approved full spec, verbatim — everything in the summary, plus what the subagent needs to build without guessing:
+  - every decision and assumption, with its reasoning
+  - concrete behavior per case: inputs, outputs, states, error and empty cases, edge cases raised in the interview
+  - interfaces and data shapes: function signatures, props, API contracts, schema or config changes
+  - the planned approach: where each piece lives, which existing code to reuse or extend, what to leave untouched
+  - acceptance criteria as testable checks, and which tests to add
 - the relevant files, patterns, and conventions you found in phase 1
 - how to run tests, lint, and typecheck, and the instruction to run them before finishing
 - constraints: stay within scope, do not commit or push unless the user asked, do not ask the user questions — make the reasonable call and report it
