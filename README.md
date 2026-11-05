@@ -9,7 +9,7 @@ Each skill lives in its own directory under `skills/` and is designed to be inst
 Install an individual skill with `npx skills add` and the `--skill` flag:
 
 ```bash
-npx skills add https://github.com/mdjastrzebski/agent-skills --skill react-review
+npx skills add https://github.com/mdjastrzebski/skills --skill [skill]
 ```
 
 The `skills` CLI runs with `npx`, so there is no separate global install step.
