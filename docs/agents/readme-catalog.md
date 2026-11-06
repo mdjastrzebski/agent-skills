@@ -8,6 +8,10 @@ Update the root `README.md` in the same change.
 
 The README is the repo index and must stay in sync with the filesystem.
 
+## Groups
+
+The README Skills section has three groups: Build, Understand, and Legacy. Place each new skill in the best-fitting purpose group; add a new `###` group only if none fits. Retiring a skill means moving its row to Legacy.
+
 ## Minimum Update
 
 - add or update the skill in the catalog table

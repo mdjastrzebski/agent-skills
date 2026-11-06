@@ -2,6 +2,8 @@
 
 Use this guide when deciding whether to add `references/`, `scripts/`, or `agents/`.
 
+Paths written as `skills/<skill-name>/...` apply equally under `skills/legacy/<skill-name>/`.
+
 ## References
 
 Add `skills/<skill-name>/references/` only when supporting material materially improves precision or reduces prompt size.
